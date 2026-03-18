@@ -1,0 +1,141 @@
+.apoyo-container {
+    padding: 2rem;
+    color: var(--text-light);
+    height: 100%;
+    overflow-y: auto;
+}
+
+.apoyo-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.apoyo-header h2 {
+    color: var(--primary-green);
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.apoyo-header p {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.8);
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.apoyo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.apoyo-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 15px;
+    padding: 2rem;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.apoyo-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 255, 136, 0.15);
+    border-color: var(--primary-green);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.apoyo-icon {
+    font-size: 3rem;
+    color: var(--primary-green);
+    margin-bottom: 1.5rem;
+}
+
+.apoyo-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: white;
+}
+
+.apoyo-card p {
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+}
+
+.apoyo-btn {
+    background: transparent;
+    border: 1px solid var(--primary-green);
+    color: var(--primary-green);
+    padding: 0.8rem 1.5rem;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.apoyo-btn:hover {
+    background: var(--primary-green);
+    color: var(--dark-bg);
+}
+
+.emergency-banner {
+    background: linear-gradient(45deg, #ff4d4d, #c0392b);
+    border-radius: 15px;
+    padding: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 2rem;
+    box-shadow: 0 10px 30px rgba(255, 77, 77, 0.3);
+}
+
+.emergency-content {
+    flex: 1;
+}
+
+.emergency-content h3 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: white;
+}
+
+.emergency-content p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.1rem;
+}
+
+.emergency-btn {
+    background: white;
+    color: #c0392b;
+    padding: 1rem 2rem;
+    border-radius: 30px;
+    font-weight: 700;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: transform 0.3s ease;
+}
+
+.emergency-btn:hover {
+    transform: scale(1.05);
+}
+
+@media (max-width: 768px) {
+    .emergency-banner {
+        flex-direction: column;
+        text-align: center;
+        gap: 1.5rem;
+    }
+
+    .apoyo-header h2 {
+        font-size: 2rem;
+    }
+}

@@ -1,0 +1,142 @@
+.service-card {
+    position: relative;
+    width: 320px;
+    height: 220px;
+    border-radius: var(--radius-md);
+    background-size: cover;
+    background-position: center;
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-normal);
+    transform-style: preserve-3d;
+}
+
+.service-card:hover {
+    transform: translateY(-10px) scale(1.03);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+}
+
+.card-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.7) 100%);
+    transition: all var(--transition-normal);
+    z-index: 1;
+}
+
+.card-overlay.hovered {
+    background: linear-gradient(135deg, rgba(0, 168, 107, 0.3) 0%, rgba(255, 170, 0, 0.3) 100%);
+}
+
+.card-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 2;
+}
+
+.card-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-light);
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+    margin-bottom: 10px;
+    transition: all var(--transition-normal);
+    text-align: center;
+}
+
+.service-card:hover .card-title {
+    transform: translateY(-5px);
+    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.9);
+}
+
+.card-icon {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gradient-primary);
+    border-radius: 50%;
+    opacity: 0;
+    transform: translateY(20px) scale(0.5);
+    transition: all var(--transition-normal);
+    box-shadow: 0 4px 15px rgba(0, 168, 107, 0.4);
+}
+
+.card-icon.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.card-icon svg {
+    color: var(--color-light);
+}
+
+/* Shine effect */
+.card-shine {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg,
+            transparent 30%,
+            rgba(255, 255, 255, 0.1) 50%,
+            transparent 70%);
+    transform: translateX(-100%) translateY(-100%) rotate(45deg);
+    transition: transform 0.6s ease;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.card-shine.active {
+    transform: translateX(100%) translateY(100%) rotate(45deg);
+}
+
+/* Pulse animation on hover */
+@keyframes cardPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 15px 40px rgba(0, 168, 107, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 15px 40px rgba(255, 170, 0, 0.3);
+    }
+}
+
+.service-card:hover {
+    animation: cardPulse 2s infinite;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .service-card {
+        width: 280px;
+        height: 200px;
+    }
+
+    .card-title {
+        font-size: 1.3rem;
+    }
+
+    .card-icon {
+        width: 45px;
+        height: 45px;
+    }
+}
+
+@media (max-width: 480px) {
+    .service-card {
+        width: 100%;
+        max-width: 350px;
+        height: 180px;
+    }
+}
