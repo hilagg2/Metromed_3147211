@@ -20,8 +20,10 @@ app.use(express.urlencoded({ extended: true }));
 // Rutas
 const authRoutes = require('./routes/authRoutes');
 const usuarioRoutes = require('./routes/usuarioRoutes');
+const juegosRoutes = require('./routes/juegosRoutes');
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/juegos', juegosRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {

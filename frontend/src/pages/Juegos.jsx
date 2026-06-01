@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { registrarPartida } from '../services/juegosService';
 
 const Juegos = () => {
     const [quizQuestions] = useState([
@@ -52,10 +53,15 @@ const Juegos = () => {
         return () => clearInterval(interval);
     }, [memoryCards]);
 
-    const checkAnswer = (answerIndex) => {
+    const checkAnswer = async (answerIndex) => {
         const isCorrect = answerIndex === quizQuestions[currentQuestionIndex].correct;
         if (isCorrect) {
-            setQuizResult('¡Correcto! +50 MetroCoins');
+            try {
+                await registrarPartida('trivia', 50, 'Pregunta respondida correctamente');
+                setQuizResult('¡Correcto! +50 MetroCoins añadidos a tu cuenta');
+            } catch (error) {
+                setQuizResult('¡Correcto! (Pero hubo un error al guardar los MetroCoins)');
+            }
         } else {
             setQuizResult('Incorrecto. ¡Inténtalo la próxima vez!');
         }
@@ -102,7 +108,7 @@ const Juegos = () => {
             const secondCard = memoryCards.find(c => c.id === card.id);
 
             if (firstCard.symbol === secondCard.symbol) {
-                setTimeout(() => {
+                setTimeout(async () => {
                     const matchedUpdated = updatedCards.map(c =>
                         c.id === firstCard.id || c.id === secondCard.id
                             ? { ...c, matched: true, flipped: false }
@@ -110,8 +116,21 @@ const Juegos = () => {
                     );
 
                     setMemoryCards(matchedUpdated);
-                    setMatchedCards([...matchedCards, firstCard.id, secondCard.id]);
+                    const newMatched = [...matchedCards, firstCard.id, secondCard.id];
+                    setMatchedCards(newMatched);
                     setFlippedCards([]);
+                    
+                    // Comprobar si ganó
+                    if (newMatched.length === matchedUpdated.length) {
+                        clearInterval(timerInterval);
+                        try {
+                            const coins = 100; // 100 monedas base por terminar
+                            await registrarPartida('memory', coins, `Partida de memoria en ${timer}s y ${moves+1} movs`);
+                            alert(`¡Juego Completado! Ganaste ${coins} MetroCoins.`);
+                        } catch (e) {
+                            alert('¡Juego Completado! (Error guardando progreso)');
+                        }
+                    }
                 }, 1000);
             } else {
                 setTimeout(() => {
@@ -143,12 +162,30 @@ const Juegos = () => {
             rouletteRef.current.style.transform = `rotate(${randomDegrees}deg)`;
         }
 
-        setTimeout(() => {
-            const prizes = ['50 MetroCoins', '100 MetroCoins', '¡Viaje Gratis!', '200 MetroCoins', '¡Gran Premio!', '25 MetroCoins'];
+        setTimeout(async () => {
+            const prizes = [
+                { name: '50 MetroCoins', amount: 50 },
+                { name: '100 MetroCoins', amount: 100 },
+                { name: '¡Viaje Gratis!', amount: 0 },
+                { name: '200 MetroCoins', amount: 200 },
+                { name: '¡Gran Premio!', amount: 500 },
+                { name: '25 MetroCoins', amount: 25 }
+            ];
             const prizeIndex = Math.floor((360 - (randomDegrees % 360)) / 60);
             const prize = prizes[prizeIndex] || prizes[0];
 
-            setPrizeResult(`¡Ganaste: ${prize}!`);
+            try {
+                if (prize.amount > 0) {
+                    await registrarPartida('roulette', prize.amount, `Premio de ruleta: ${prize.name}`);
+                    setPrizeResult(`¡Ganaste: ${prize.name}! Las monedas han sido añadidas.`);
+                } else {
+                    await registrarPartida('roulette', 0, `Premio de ruleta: ${prize.name}`);
+                    setPrizeResult(`¡Ganaste: ${prize.name}! (No otorga MetroCoins)`);
+                }
+            } catch (error) {
+                setPrizeResult(`¡Ganaste: ${prize.name}! (Error al guardar recompensa)`);
+            }
+            
             setRouletteSpinning(false);
         }, 3000);
     };
