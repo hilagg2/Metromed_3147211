@@ -32,12 +32,34 @@ const Juegos = () => {
     const [prizeResult, setPrizeResult] = useState('');
     const rouletteRef = useRef(null);
 
+    const [activeGames, setActiveGames] = useState([]);
+    
+    // Snake Game State
+    const [snakeScore, setSnakeScore] = useState(0);
+    const [snakePlaying, setSnakePlaying] = useState(false);
+    const snakeCanvasRef = useRef(null);
+
     useEffect(() => {
+        fetchActiveGames();
         initMemoryGame();
         return () => {
             if (timerInterval) clearInterval(timerInterval);
         };
     }, []);
+
+    const fetchActiveGames = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/juegos');
+            const data = await res.json();
+            if (data.success) {
+                setActiveGames(data.juegos.map(j => j.identificador));
+            }
+        } catch (e) {
+            console.error("Error fetching games", e);
+            // Si falla, mostramos todos por defecto
+            setActiveGames(['trivia', 'memory', 'snake', 'roulette']);
+        }
+    };
 
     useEffect(() => {
         if (timerInterval) {
@@ -190,6 +212,110 @@ const Juegos = () => {
         }, 3000);
     };
 
+    // --- LOGICA DE SNAKE ---
+    const startSnake = () => {
+        if (snakePlaying) return;
+        setSnakePlaying(true);
+        setSnakeScore(0);
+        
+        const canvas = snakeCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const grid = 16;
+        let count = 0;
+        let animationId;
+        
+        let snake = {
+            x: 160, y: 160,
+            dx: grid, dy: 0,
+            cells: [], maxCells: 4
+        };
+        
+        let apple = {
+            x: 320, y: 320
+        };
+
+        const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min)) + min;
+
+        const loop = () => {
+            animationId = requestAnimationFrame(loop);
+            if (++count < 6) return;
+            count = 0;
+            
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            snake.x += snake.dx;
+            snake.y += snake.dy;
+            
+            // Paredes (muerte)
+            if (snake.x < 0 || snake.x >= canvas.width || snake.y < 0 || snake.y >= canvas.height) {
+                endSnake(snake.maxCells - 4, animationId);
+                return;
+            }
+            
+            snake.cells.unshift({x: snake.x, y: snake.y});
+            if (snake.cells.length > snake.maxCells) snake.cells.pop();
+            
+            ctx.fillStyle = 'red';
+            ctx.fillRect(apple.x, apple.y, grid-1, grid-1);
+            
+            ctx.fillStyle = 'green';
+            snake.cells.forEach(function(cell, index) {
+                ctx.fillRect(cell.x, cell.y, grid-1, grid-1);
+                
+                // Comer manzana
+                if (cell.x === apple.x && cell.y === apple.y) {
+                    snake.maxCells++;
+                    setSnakeScore(prev => prev + 10);
+                    apple.x = getRandomInt(0, 25) * grid;
+                    apple.y = getRandomInt(0, 18) * grid;
+                }
+                
+                // Chocar consigo mismo
+                for (let i = index + 1; i < snake.cells.length; i++) {
+                    if (cell.x === snake.cells[i].x && cell.y === snake.cells[i].y) {
+                        endSnake(snake.maxCells - 4, animationId);
+                        return;
+                    }
+                }
+            });
+        };
+
+        const handleKey = (e) => {
+            if (e.which === 37 && snake.dx === 0) { snake.dx = -grid; snake.dy = 0; }
+            else if (e.which === 38 && snake.dy === 0) { snake.dy = -grid; snake.dx = 0; }
+            else if (e.which === 39 && snake.dx === 0) { snake.dx = grid; snake.dy = 0; }
+            else if (e.which === 40 && snake.dy === 0) { snake.dy = grid; snake.dx = 0; }
+        };
+        
+        document.addEventListener('keydown', handleKey);
+        
+        const endSnake = async (applesEaten, animId) => {
+            cancelAnimationFrame(animId);
+            document.removeEventListener('keydown', handleKey);
+            setSnakePlaying(false);
+            
+            // Final del juego
+            const finalScore = applesEaten * 10;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '20px sans-serif';
+            ctx.fillText('Game Over', canvas.width/2 - 50, canvas.height/2);
+            
+            try {
+                if (finalScore > 0) {
+                    await registrarPartida('snake', finalScore, `Puntuación en Snake: ${finalScore}`);
+                    alert(`¡Juego Terminado! Ganaste ${finalScore} MetroCoins.`);
+                } else {
+                    alert('¡Juego Terminado! Intenta comer más manzanas la próxima vez.');
+                }
+            } catch(e) {
+                console.error("Error guardando score", e);
+            }
+        };
+
+        requestAnimationFrame(loop);
+    };
+
     return (
         <>
             <div className="games-header">
@@ -197,8 +323,10 @@ const Juegos = () => {
                     <i className="fas fa-gamepad"></i> Centro de Juegos MetroMed
                 </h1>
                 <p>Diviértete, aprende y gana recompensas mientras conoces más sobre el Metro de Medellín</p>
+                {activeGames.length === 0 && <p style={{color: 'red'}}>Cargando juegos...</p>}
             </div>
 
+            {activeGames.includes('trivia') && (
             <div className="game-card featured">
                 <div className="game-badge">Popular</div>
                 <h3><i className="fas fa-brain"></i> Quiz MetroExperto</h3>
@@ -222,7 +350,9 @@ const Juegos = () => {
                     Siguiente Pregunta
                 </button>
             </div>
+            )}
 
+            {activeGames.includes('memory') && (
             <div className="game-card">
                 <div className="game-badge">Nuevo</div>
                 <h3><i className="fas fa-puzzle-piece"></i> Memoria del Metro</h3>
@@ -251,20 +381,24 @@ const Juegos = () => {
                     Nuevo Juego
                 </button>
             </div>
+            )}
 
+            {activeGames.includes('snake') && (
             <div className="game-card">
                 <h3><i className="fas fa-gamepad"></i> Metro Snake</h3>
                 <p>¡Guía el tren por las rutas sin chocar!</p>
                 <div className="snake-container">
                     <canvas
+                        ref={snakeCanvasRef}
                         className="game-canvas"
                         width="400"
                         height="300"
+                        style={{ background: '#2c3e50', border: '2px solid var(--border)' }}
                     ></canvas>
                     <div style={{ marginTop: '1rem' }}>
-                        <span>Puntuación: <strong>0</strong></span>
-                        <button className="action-btn" onClick={() => alert('Juego en desarrollo - Próximamente')}>
-                            Iniciar Juego
+                        <span>Puntuación: <strong>{snakeScore}</strong></span>
+                        <button className="action-btn" onClick={startSnake} disabled={snakePlaying} style={{ marginLeft: '1rem' }}>
+                            {snakePlaying ? 'Jugando...' : 'Iniciar Juego'}
                         </button>
                     </div>
                     <div style={{ marginTop: '1rem', color: 'rgba(255,255,255,0.7)' }}>
@@ -272,7 +406,9 @@ const Juegos = () => {
                     </div>
                 </div>
             </div>
+            )}
 
+            {activeGames.includes('roulette') && (
             <div className="game-card">
                 <div className="game-badge">¡Premios!</div>
                 <h3><i className="fas fa-gift"></i> Ruleta MetroRewards</h3>
@@ -296,6 +432,7 @@ const Juegos = () => {
                     {prizeResult && <div className="prize-result">{prizeResult}</div>}
                 </div>
             </div>
+            )}
         </>
     );
 };

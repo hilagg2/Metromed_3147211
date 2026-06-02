@@ -14,7 +14,15 @@ const calcularNivel = (metroCoins) => {
  */
 const getJuegos = async (req, res) => {
     try {
-        const [juegos] = await pool.query('SELECT * FROM juegos WHERE activo = TRUE');
+        // Obtenemos todos los juegos para el admin, o los activos para el frontend
+        // Si el usuario es admin, pasaremos un query param o lo dejaremos traer todos
+        const isAdmin = req.query.admin === 'true';
+        let query = 'SELECT * FROM juegos';
+        if (!isAdmin) {
+            query += ' WHERE activo = TRUE';
+        }
+        
+        const [juegos] = await pool.query(query);
         res.json({
             success: true,
             juegos
@@ -136,9 +144,31 @@ const getRanking = async (req, res) => {
     }
 };
 
+/**
+ * Actualizar configuración de un juego (Admin)
+ * PUT /api/juegos/:id
+ */
+const updateJuego = async (req, res) => {
+    // Solo admins deberían hacer esto, aquí se asume que verifyToken dejó info en req.user
+    const { id } = req.params;
+    const { activo, recompensa_base } = req.body;
+    
+    try {
+        await pool.query(
+            'UPDATE juegos SET activo = COALESCE(?, activo), recompensa_base = COALESCE(?, recompensa_base) WHERE id_juego = ?',
+            [activo, recompensa_base, id]
+        );
+        res.json({ success: true, message: 'Juego actualizado correctamente' });
+    } catch (error) {
+        console.error('Error al actualizar juego:', error);
+        res.status(500).json({ success: false, message: 'Error al actualizar el juego' });
+    }
+};
+
 module.exports = {
     getJuegos,
     registrarPartida,
     getHistorial,
-    getRanking
+    getRanking,
+    updateJuego
 };

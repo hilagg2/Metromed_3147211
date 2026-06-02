@@ -112,6 +112,10 @@ const Gestion_usuario = () => {
                         <i className="fas fa-users nav-icon" />
                         Gestión de Usuarios
                     </div>
+                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/juegos'); }}>
+                        <i className="fas fa-gamepad nav-icon" />
+                        Gestión de Juegos
+                    </div>
                     <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/perfil'); }}>
                         <i className="fas fa-id-card nav-icon" />
                         Mi Perfil

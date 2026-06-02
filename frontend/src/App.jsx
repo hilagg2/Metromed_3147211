@@ -6,6 +6,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import Dashboard from './pages/Dashboard' // Cambié a mayúscula
 import Dashboard_admin from './pages/Dashboard_admin'
 import Gestion_usuario from './pages/Gestion_usuario'
+import AdminJuegos from './pages/AdminJuegos'
 import AccessDenied from './pages/AccessDenied'
 import Trafico from './pages/Trafico'
 import Apoyopsiqui from './pages/Apoyopsiqui'
@@ -21,6 +22,7 @@ function App() {
                 <Route path="/Dashboard" element={<Dashboard />} />
                 <Route path="/Dashboard_admin" element={<Dashboard_admin />} />
                 <Route path="/admin/usuarios" element={<Gestion_usuario />} />
+                <Route path="/admin/juegos" element={<AdminJuegos />} />
                 <Route path="/trafico" element={<Trafico />} /> {/* Ruta para mapa completo */}
                 <Route path="/apoyo-psicologico" element={<Apoyopsiqui />} />
                 <Route path="*" element={<AccessDenied />} />

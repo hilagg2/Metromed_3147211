@@ -11,4 +11,7 @@ router.get('/ranking', juegosController.getRanking);
 router.post('/jugar', verifyToken, juegosController.registrarPartida);
 router.get('/historial', verifyToken, juegosController.getHistorial);
 
+// Rutas de administración
+router.put('/:id', verifyToken, juegosController.updateJuego);
+
 module.exports = router;

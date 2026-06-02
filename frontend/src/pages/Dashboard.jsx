@@ -6,6 +6,7 @@ import Inicio from './Inicio';
 import Juegos from './Juegos';
 import Wrapped from './Wrapped';
 import Perfil from './Perfil';
+import Ranking from './Ranking';
 import ApoyoPsicologico from './Apoyopsiqui';
 import Configuracion from './Configuracion';
 import './Dashboard.css';
@@ -69,6 +70,8 @@ const Dashboard = () => {
                 return <Trafico onBack={() => showSection('inicio')} />;
             case 'perfil':
                 return <Perfil showSection={showSection} />;
+            case 'ranking':
+                return <Ranking />;
             case 'apoyo-psicologico':
                 return <ApoyoPsicologico />;
             case 'configuracion':
@@ -109,6 +112,13 @@ const Dashboard = () => {
                         text="Juegos"
                         section="juegos"
                         isActive={activeSection === 'juegos'}
+                        onClick={showSection}
+                    />
+                    <SidebarItem
+                        icon="fas fa-trophy"
+                        text="Ranking"
+                        section="ranking"
+                        isActive={activeSection === 'ranking'}
                         onClick={showSection}
                     />
                     <SidebarItem
