@@ -1,28 +1,27 @@
-const mysql = require('mysql2/promise');
+const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
-// Crear pool de conexiones para mejor rendimiento
-const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+    console.error('❌ Faltan variables SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en .env');
+    process.exit(1);
+}
+
+// Crear cliente de Supabase
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Función para probar la conexión
 const testConnection = async () => {
     try {
-        const connection = await pool.getConnection();
-        console.log('✅ Conexión a MySQL establecida correctamente');
-        connection.release();
+        const { data, error } = await supabase.from('roles').select('id_rol').limit(1);
+        if (error) throw error;
+        console.log('✅ Conexión a Supabase establecida correctamente');
     } catch (error) {
-        console.error('❌ Error al conectar con MySQL:', error.message);
-        process.exit(1);
+        console.error('❌ Error al conectar con Supabase:', error.message);
+        throw error;
     }
 };
 
-module.exports = { pool, testConnection };
+module.exports = { supabase, testConnection };

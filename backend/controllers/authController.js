@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/database');
+const { supabase } = require('../config/database');
 const { generateVerificationCode, getExpirationDate } = require('../utils/generateCode');
 const { sendVerificationCode } = require('../utils/emailService');
 
@@ -13,12 +13,14 @@ const register = async (req, res) => {
 
     try {
         // RF-04: Verificar si el usuario ya existe
-        const [existingUser] = await pool.query(
-            'SELECT id_usuario FROM usuarios WHERE correo = ?',
-            [correo]
-        );
+        const { data: existingUser, error: checkError } = await supabase
+            .from('usuarios')
+            .select('id_usuario')
+            .eq('correo', correo);
 
-        if (existingUser.length > 0) {
+        if (checkError) throw checkError;
+
+        if (existingUser && existingUser.length > 0) {
             return res.status(400).json({
                 success: false,
                 message: 'El correo electrónico ya está registrado'
@@ -30,16 +32,24 @@ const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(contrasena, saltRounds);
 
         // Insertar usuario en la base de datos
-        const [result] = await pool.query(
-            `INSERT INTO usuarios (id_rol, nombre, correo, contrasena, fecha_registro, saldo_metrocoins, verificado) 
-       VALUES (?, ?, ?, ?, NOW(), 0, 0)`,
-            [1, nombre, correo, hashedPassword] // id_rol = 1 para usuario normal
-        );
+        const { data: result, error: insertError } = await supabase
+            .from('usuarios')
+            .insert({
+                id_rol: 1, // usuario normal
+                nombre,
+                correo,
+                contrasena: hashedPassword,
+                saldo_metrocoins: 0,
+                verificado: 0
+            })
+            .select('id_usuario');
+
+        if (insertError) throw insertError;
 
         res.status(201).json({
             success: true,
             message: 'Usuario registrado exitosamente',
-            userId: result.insertId
+            userId: result[0].id_usuario
         });
 
     } catch (error) {
@@ -61,13 +71,15 @@ const login = async (req, res) => {
 
     try {
         // Buscar usuario por correo
-        const [users] = await pool.query(
-            'SELECT id_usuario, id_rol, nombre, correo, contrasena FROM usuarios WHERE correo = ?',
-            [correo]
-        );
+        const { data: users, error } = await supabase
+            .from('usuarios')
+            .select('id_usuario, id_rol, nombre, correo, contrasena')
+            .eq('correo', correo);
+
+        if (error) throw error;
 
         // RF-08: Verificar si el usuario existe
-        if (users.length === 0) {
+        if (!users || users.length === 0) {
             return res.status(401).json({
                 success: false,
                 message: 'Correo o contraseña incorrectos'
@@ -129,12 +141,14 @@ const forgotPassword = async (req, res) => {
 
     try {
         // Verificar si el usuario existe
-        const [users] = await pool.query(
-            'SELECT id_usuario, nombre FROM usuarios WHERE correo = ?',
-            [correo]
-        );
+        const { data: users, error: userError } = await supabase
+            .from('usuarios')
+            .select('id_usuario, nombre')
+            .eq('correo', correo);
 
-        if (users.length === 0) {
+        if (userError) throw userError;
+
+        if (!users || users.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'No existe una cuenta con ese correo electrónico'
@@ -148,17 +162,23 @@ const forgotPassword = async (req, res) => {
         const expirationDate = getExpirationDate(); // 15 minutos
 
         // Eliminar códigos anteriores del usuario
-        await pool.query(
-            'DELETE FROM codigosverificacion WHERE id_usuario = ?',
-            [user.id_usuario]
-        );
+        const { error: deleteError } = await supabase
+            .from('codigosverificacion')
+            .delete()
+            .eq('id_usuario', user.id_usuario);
+
+        if (deleteError) throw deleteError;
 
         // Guardar código en la base de datos
-        await pool.query(
-            `INSERT INTO codigosverificacion (id_usuario, codigo, fecha_creacion, fecha_expiracion) 
-       VALUES (?, ?, NOW(), ?)`,
-            [user.id_usuario, code, expirationDate]
-        );
+        const { error: insertError } = await supabase
+            .from('codigosverificacion')
+            .insert({
+                id_usuario: user.id_usuario,
+                codigo: code,
+                fecha_expiracion: expirationDate.toISOString()
+            });
+
+        if (insertError) throw insertError;
 
         // Enviar código por email
         await sendVerificationCode(correo, code, user.nombre);
@@ -187,12 +207,14 @@ const verifyCode = async (req, res) => {
 
     try {
         // Buscar usuario
-        const [users] = await pool.query(
-            'SELECT id_usuario FROM usuarios WHERE correo = ?',
-            [correo]
-        );
+        const { data: users, error: userError } = await supabase
+            .from('usuarios')
+            .select('id_usuario')
+            .eq('correo', correo);
 
-        if (users.length === 0) {
+        if (userError) throw userError;
+
+        if (!users || users.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Usuario no encontrado'
@@ -202,14 +224,15 @@ const verifyCode = async (req, res) => {
         const userId = users[0].id_usuario;
 
         // Buscar código de verificación
-        const [codes] = await pool.query(
-            `SELECT id_codigo, codigo, fecha_expiracion 
-       FROM codigosverificacion 
-       WHERE id_usuario = ? AND codigo = ?`,
-            [userId, codigo]
-        );
+        const { data: codes, error: codeError } = await supabase
+            .from('codigosverificacion')
+            .select('id_codigo, codigo, fecha_expiracion')
+            .eq('id_usuario', userId)
+            .eq('codigo', codigo);
 
-        if (codes.length === 0) {
+        if (codeError) throw codeError;
+
+        if (!codes || codes.length === 0) {
             return res.status(400).json({
                 success: false,
                 message: 'Código de verificación incorrecto'
@@ -224,10 +247,10 @@ const verifyCode = async (req, res) => {
 
         if (now > expirationDate) {
             // Eliminar código expirado
-            await pool.query(
-                'DELETE FROM codigosverificacion WHERE id_codigo = ?',
-                [codeData.id_codigo]
-            );
+            await supabase
+                .from('codigosverificacion')
+                .delete()
+                .eq('id_codigo', codeData.id_codigo);
 
             return res.status(400).json({
                 success: false,
@@ -271,12 +294,14 @@ const resetPassword = async (req, res) => {
         const { userId, codeId } = decoded;
 
         // Obtener contraseña actual del usuario
-        const [users] = await pool.query(
-            'SELECT contrasena FROM usuarios WHERE id_usuario = ?',
-            [userId]
-        );
+        const { data: users, error: userError } = await supabase
+            .from('usuarios')
+            .select('contrasena')
+            .eq('id_usuario', userId);
 
-        if (users.length === 0) {
+        if (userError) throw userError;
+
+        if (!users || users.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Usuario no encontrado'
@@ -298,16 +323,20 @@ const resetPassword = async (req, res) => {
         const hashedPassword = await bcrypt.hash(nuevaContrasena, saltRounds);
 
         // Actualizar contraseña
-        await pool.query(
-            'UPDATE usuarios SET contrasena = ? WHERE id_usuario = ?',
-            [hashedPassword, userId]
-        );
+        const { error: updateError } = await supabase
+            .from('usuarios')
+            .update({ contrasena: hashedPassword })
+            .eq('id_usuario', userId);
+
+        if (updateError) throw updateError;
 
         // Eliminar código de verificación usado
-        await pool.query(
-            'DELETE FROM codigosverificacion WHERE id_codigo = ?',
-            [codeId]
-        );
+        const { error: deleteError } = await supabase
+            .from('codigosverificacion')
+            .delete()
+            .eq('id_codigo', codeId);
+
+        if (deleteError) throw deleteError;
 
         res.json({
             success: true,

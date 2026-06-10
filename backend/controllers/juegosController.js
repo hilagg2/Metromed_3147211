@@ -1,4 +1,4 @@
-const { pool } = require('../config/database');
+const { supabase } = require('../config/database');
 
 /**
  * Función auxiliar para calcular el nivel basado en MetroCoins
@@ -14,15 +14,17 @@ const calcularNivel = (metroCoins) => {
  */
 const getJuegos = async (req, res) => {
     try {
-        // Obtenemos todos los juegos para el admin, o los activos para el frontend
-        // Si el usuario es admin, pasaremos un query param o lo dejaremos traer todos
         const isAdmin = req.query.admin === 'true';
-        let query = 'SELECT * FROM juegos';
+        let query = supabase.from('juegos').select('*');
+
         if (!isAdmin) {
-            query += ' WHERE activo = TRUE';
+            query = query.eq('activo', true);
         }
-        
-        const [juegos] = await pool.query(query);
+
+        const { data: juegos, error } = await query;
+
+        if (error) throw error;
+
         res.json({
             success: true,
             juegos
@@ -43,12 +45,17 @@ const registrarPartida = async (req, res) => {
 
     try {
         // Verificar que el juego exista y esté activo
-        const [juegos] = await pool.query('SELECT id_juego, activo FROM juegos WHERE identificador = ?', [identificador]);
-        
-        if (juegos.length === 0) {
+        const { data: juegos, error: juegoError } = await supabase
+            .from('juegos')
+            .select('id_juego, activo')
+            .eq('identificador', identificador);
+
+        if (juegoError) throw juegoError;
+
+        if (!juegos || juegos.length === 0) {
             return res.status(404).json({ success: false, message: 'Juego no encontrado' });
         }
-        
+
         if (!juegos[0].activo) {
             return res.status(400).json({ success: false, message: 'Este juego se encuentra deshabilitado temporalmente' });
         }
@@ -56,29 +63,45 @@ const registrarPartida = async (req, res) => {
         const juegoId = juegos[0].id_juego;
 
         // Registrar en historial
-        await pool.query(
-            'INSERT INTO historial_juegos (id_usuario, id_juego, monedas_obtenidas, detalles) VALUES (?, ?, ?, ?)',
-            [userId, juegoId, monedas_obtenidas, detalles || '']
-        );
+        const { error: histError } = await supabase
+            .from('historial_juegos')
+            .insert({
+                id_usuario: userId,
+                id_juego: juegoId,
+                monedas_obtenidas,
+                detalles: detalles || ''
+            });
 
-        // Actualizar saldo de usuario
-        await pool.query(
-            'UPDATE usuarios SET saldo_metrocoins = saldo_metrocoins + ? WHERE id_usuario = ?',
-            [monedas_obtenidas, userId]
-        );
+        if (histError) throw histError;
 
-        // Obtener saldo actualizado y calcular posible subida de nivel
-        const [usuarios] = await pool.query('SELECT saldo_metrocoins, nivel FROM usuarios WHERE id_usuario = ?', [userId]);
-        const nuevoSaldo = parseFloat(usuarios[0].saldo_metrocoins);
-        const nivelActual = usuarios[0].nivel || 1;
-        
+        // Obtener saldo actual del usuario
+        const { data: userData, error: userError } = await supabase
+            .from('usuarios')
+            .select('saldo_metrocoins, nivel')
+            .eq('id_usuario', userId)
+            .single();
+
+        if (userError) throw userError;
+
+        const nuevoSaldo = (parseFloat(userData.saldo_metrocoins) || 0) + monedas_obtenidas;
+        const nivelActual = userData.nivel || 1;
         const nuevoNivelCalculado = calcularNivel(nuevoSaldo);
-        
+
+        // Actualizar saldo y posiblemente nivel
+        const updateData = { saldo_metrocoins: nuevoSaldo };
         let subioDeNivel = false;
+
         if (nuevoNivelCalculado > nivelActual) {
-            await pool.query('UPDATE usuarios SET nivel = ? WHERE id_usuario = ?', [nuevoNivelCalculado, userId]);
+            updateData.nivel = nuevoNivelCalculado;
             subioDeNivel = true;
         }
+
+        const { error: updateError } = await supabase
+            .from('usuarios')
+            .update(updateData)
+            .eq('id_usuario', userId);
+
+        if (updateError) throw updateError;
 
         res.json({
             success: true,
@@ -102,14 +125,23 @@ const registrarPartida = async (req, res) => {
 const getHistorial = async (req, res) => {
     const userId = req.user.id;
     try {
-        const [historial] = await pool.query(`
-            SELECT h.id_historial, j.nombre as juego, h.monedas_obtenidas, h.fecha_jugada, h.detalles
-            FROM historial_juegos h
-            JOIN juegos j ON h.id_juego = j.id_juego
-            WHERE h.id_usuario = ?
-            ORDER BY h.fecha_jugada DESC
-            LIMIT 50
-        `, [userId]);
+        const { data, error } = await supabase
+            .from('historial_juegos')
+            .select('id_historial, juegos(nombre), monedas_obtenidas, fecha_jugada, detalles')
+            .eq('id_usuario', userId)
+            .order('fecha_jugada', { ascending: false })
+            .limit(50);
+
+        if (error) throw error;
+
+        // Mapear para mantener la misma estructura de respuesta
+        const historial = (data || []).map(h => ({
+            id_historial: h.id_historial,
+            juego: h.juegos?.nombre || 'Desconocido',
+            monedas_obtenidas: h.monedas_obtenidas,
+            fecha_jugada: h.fecha_jugada,
+            detalles: h.detalles
+        }));
 
         res.json({
             success: true,
@@ -127,12 +159,13 @@ const getHistorial = async (req, res) => {
  */
 const getRanking = async (req, res) => {
     try {
-        const [ranking] = await pool.query(`
-            SELECT id_usuario, nombre, saldo_metrocoins, nivel
-            FROM usuarios
-            ORDER BY saldo_metrocoins DESC
-            LIMIT 20
-        `);
+        const { data: ranking, error } = await supabase
+            .from('usuarios')
+            .select('id_usuario, nombre, saldo_metrocoins, nivel')
+            .order('saldo_metrocoins', { ascending: false })
+            .limit(20);
+
+        if (error) throw error;
 
         res.json({
             success: true,
@@ -149,15 +182,22 @@ const getRanking = async (req, res) => {
  * PUT /api/juegos/:id
  */
 const updateJuego = async (req, res) => {
-    // Solo admins deberían hacer esto, aquí se asume que verifyToken dejó info en req.user
     const { id } = req.params;
     const { activo, recompensa_base } = req.body;
-    
+
     try {
-        await pool.query(
-            'UPDATE juegos SET activo = COALESCE(?, activo), recompensa_base = COALESCE(?, recompensa_base) WHERE id_juego = ?',
-            [activo, recompensa_base, id]
-        );
+        // Construir objeto de actualización solo con campos proporcionados
+        const updateData = {};
+        if (activo !== undefined && activo !== null) updateData.activo = activo;
+        if (recompensa_base !== undefined && recompensa_base !== null) updateData.recompensa_base = recompensa_base;
+
+        const { error } = await supabase
+            .from('juegos')
+            .update(updateData)
+            .eq('id_juego', id);
+
+        if (error) throw error;
+
         res.json({ success: true, message: 'Juego actualizado correctamente' });
     } catch (error) {
         console.error('Error al actualizar juego:', error);

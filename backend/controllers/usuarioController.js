@@ -1,14 +1,23 @@
 const bcrypt = require('bcrypt');
-const { pool } = require('../config/database');
+const { supabase } = require('../config/database');
 
 const getUsuarios = async (req, res) => {
     try {
-        const [usuarios] = await pool.query(
-            `SELECT id_usuario as id, nombre, correo, 
-            CASE WHEN id_rol = 2 THEN 'administrador' ELSE 'usuario' END as rol,
-            'activo' as estado
-            FROM usuarios`
-        );
+        const { data, error } = await supabase
+            .from('usuarios')
+            .select('id_usuario, nombre, correo, id_rol');
+
+        if (error) throw error;
+
+        // Mapear para mantener la misma estructura de respuesta
+        const usuarios = (data || []).map(u => ({
+            id: u.id_usuario,
+            nombre: u.nombre,
+            correo: u.correo,
+            rol: u.id_rol === 2 ? 'administrador' : 'usuario',
+            estado: 'activo'
+        }));
+
         res.json(usuarios);
     } catch (error) {
         console.error('Error al obtener usuarios:', error);
@@ -21,12 +30,19 @@ const createUsuario = async (req, res) => {
     try {
         const id_rol = rol === 'administrador' ? 2 : 1;
         const hashedPassword = await bcrypt.hash(password || '123456', 10);
-        
-        await pool.query(
-            'INSERT INTO usuarios (id_rol, nombre, correo, contrasena, fecha_registro, verificado) VALUES (?, ?, ?, ?, NOW(), 1)',
-            [id_rol, nombre, correo, hashedPassword]
-        );
-        
+
+        const { error } = await supabase
+            .from('usuarios')
+            .insert({
+                id_rol,
+                nombre,
+                correo,
+                contrasena: hashedPassword,
+                verificado: 1
+            });
+
+        if (error) throw error;
+
         res.status(201).json({ message: 'Usuario creado exitosamente' });
     } catch (error) {
         console.error('Error al crear usuario:', error);
@@ -39,20 +55,21 @@ const updateUsuario = async (req, res) => {
     const { nombre, correo, rol, password } = req.body;
     try {
         const id_rol = rol === 'administrador' ? 2 : 1;
-        
+
+        const updateData = { id_rol, nombre, correo };
+
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
-            await pool.query(
-                'UPDATE usuarios SET id_rol = ?, nombre = ?, correo = ?, contrasena = ? WHERE id_usuario = ?',
-                [id_rol, nombre, correo, hashedPassword, id]
-            );
-        } else {
-            await pool.query(
-                'UPDATE usuarios SET id_rol = ?, nombre = ?, correo = ? WHERE id_usuario = ?',
-                [id_rol, nombre, correo, id]
-            );
+            updateData.contrasena = hashedPassword;
         }
-        
+
+        const { error } = await supabase
+            .from('usuarios')
+            .update(updateData)
+            .eq('id_usuario', id);
+
+        if (error) throw error;
+
         res.json({ message: 'Usuario actualizado exitosamente' });
     } catch (error) {
         console.error('Error al actualizar usuario:', error);
@@ -63,7 +80,13 @@ const updateUsuario = async (req, res) => {
 const deleteUsuario = async (req, res) => {
     const { id } = req.params;
     try {
-        await pool.query('DELETE FROM usuarios WHERE id_usuario = ?', [id]);
+        const { error } = await supabase
+            .from('usuarios')
+            .delete()
+            .eq('id_usuario', id);
+
+        if (error) throw error;
+
         res.json({ message: 'Usuario eliminado exitosamente' });
     } catch (error) {
         console.error('Error al eliminar usuario:', error);

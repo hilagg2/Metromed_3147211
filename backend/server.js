@@ -61,7 +61,7 @@ const startServer = async () => {
         try {
             await testConnection();
         } catch (dbError) {
-            console.warn('⚠️ No se pudo conectar a la base de datos. El servidor iniciará de todos modos.');
+            console.warn('⚠️ No se pudo conectar a Supabase. El servidor iniciará de todos modos.');
             console.warn('⚠️ Detalle:', dbError && dbError.message ? dbError.message : dbError);
         }
 
