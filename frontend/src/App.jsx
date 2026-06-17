@@ -9,6 +9,7 @@ import Gestion_usuario from './pages/Gestion_usuario'
 import AccessDenied from './pages/AccessDenied'
 import Trafico from './pages/Trafico'
 import Apoyopsiqui from './pages/Apoyopsiqui'
+import Perfil_admin from './pages/Perfil_admin'
 
 function App() {
     return (
@@ -23,6 +24,7 @@ function App() {
                 <Route path="/admin/usuarios" element={<Gestion_usuario />} />
                 <Route path="/trafico" element={<Trafico />} /> {/* Ruta para mapa completo */}
                 <Route path="/apoyo-psicologico" element={<Apoyopsiqui />} />
+                <Route path="/admin/perfil" element={<Perfil_admin />} />
                 <Route path="*" element={<AccessDenied />} />
             </Routes>
         </Router>

@@ -40,7 +40,7 @@ function Login() {
             alert(`¡Bienvenido/a ${response.user.nombre}! 🎉`)
 
 
-            if (response.user.rol === 2) {
+            if (Number(response.user.rol) === 1) {
                 navigate('/Dashboard_admin')
             } else {
                 navigate('/Dashboard')

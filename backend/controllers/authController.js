@@ -14,7 +14,7 @@ const register = async (req, res) => {
     try {
         // RF-04: Verificar si el usuario ya existe
         const [existingUser] = await pool.query(
-            'SELECT id_usuario FROM usuarios WHERE correo = ?',
+            'SELECT id_usuario FROM usuarios WHERE correo = $1',
             [correo]
         );
 
@@ -32,14 +32,14 @@ const register = async (req, res) => {
         // Insertar usuario en la base de datos
         const [result] = await pool.query(
             `INSERT INTO usuarios (id_rol, nombre, correo, contrasena, fecha_registro, saldo_metrocoins, verificado) 
-       VALUES (?, ?, ?, ?, NOW(), 0, 0)`,
-            [1, nombre, correo, hashedPassword] // id_rol = 1 para usuario normal
+       VALUES ($1, $2, $3, $4, NOW(), 0, 0) RETURNING id_usuario`,
+            [2, nombre, correo, hashedPassword] // id_rol = 2 para usuario normal
         );
 
         res.status(201).json({
             success: true,
             message: 'Usuario registrado exitosamente',
-            userId: result.insertId
+            userId: result[0].id_usuario
         });
 
     } catch (error) {
@@ -62,7 +62,7 @@ const login = async (req, res) => {
     try {
         // Buscar usuario por correo
         const [users] = await pool.query(
-            'SELECT id_usuario, id_rol, nombre, correo, contrasena FROM usuarios WHERE correo = ?',
+            'SELECT id_usuario, id_rol, nombre, correo, contrasena FROM usuarios WHERE correo = $1',
             [correo]
         );
 
@@ -130,7 +130,7 @@ const forgotPassword = async (req, res) => {
     try {
         // Verificar si el usuario existe
         const [users] = await pool.query(
-            'SELECT id_usuario, nombre FROM usuarios WHERE correo = ?',
+            'SELECT id_usuario, nombre FROM usuarios WHERE correo = $1',
             [correo]
         );
 
@@ -149,14 +149,14 @@ const forgotPassword = async (req, res) => {
 
         // Eliminar códigos anteriores del usuario
         await pool.query(
-            'DELETE FROM codigosverificacion WHERE id_usuario = ?',
+            'DELETE FROM codigosverificacion WHERE id_usuario = $1',
             [user.id_usuario]
         );
 
         // Guardar código en la base de datos
         await pool.query(
             `INSERT INTO codigosverificacion (id_usuario, codigo, fecha_creacion, fecha_expiracion) 
-       VALUES (?, ?, NOW(), ?)`,
+       VALUES ($1, $2, NOW(), $3)`,
             [user.id_usuario, code, expirationDate]
         );
 
@@ -188,7 +188,7 @@ const verifyCode = async (req, res) => {
     try {
         // Buscar usuario
         const [users] = await pool.query(
-            'SELECT id_usuario FROM usuarios WHERE correo = ?',
+            'SELECT id_usuario FROM usuarios WHERE correo = $1',
             [correo]
         );
 
@@ -205,7 +205,7 @@ const verifyCode = async (req, res) => {
         const [codes] = await pool.query(
             `SELECT id_codigo, codigo, fecha_expiracion 
        FROM codigosverificacion 
-       WHERE id_usuario = ? AND codigo = ?`,
+       WHERE id_usuario = $1 AND codigo = $2`,
             [userId, codigo]
         );
 
@@ -225,7 +225,7 @@ const verifyCode = async (req, res) => {
         if (now > expirationDate) {
             // Eliminar código expirado
             await pool.query(
-                'DELETE FROM codigosverificacion WHERE id_codigo = ?',
+                'DELETE FROM codigosverificacion WHERE id_codigo = $1',
                 [codeData.id_codigo]
             );
 
@@ -272,7 +272,7 @@ const resetPassword = async (req, res) => {
 
         // Obtener contraseña actual del usuario
         const [users] = await pool.query(
-            'SELECT contrasena FROM usuarios WHERE id_usuario = ?',
+            'SELECT contrasena FROM usuarios WHERE id_usuario = $1',
             [userId]
         );
 
@@ -299,13 +299,13 @@ const resetPassword = async (req, res) => {
 
         // Actualizar contraseña
         await pool.query(
-            'UPDATE usuarios SET contrasena = ? WHERE id_usuario = ?',
+            'UPDATE usuarios SET contrasena = $1 WHERE id_usuario = $2',
             [hashedPassword, userId]
         );
 
         // Eliminar código de verificación usado
         await pool.query(
-            'DELETE FROM codigosverificacion WHERE id_codigo = ?',
+            'DELETE FROM codigosverificacion WHERE id_codigo = $1',
             [codeId]
         );
 

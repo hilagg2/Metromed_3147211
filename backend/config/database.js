@@ -1,26 +1,34 @@
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 require('dotenv').config();
 
-// Crear pool de conexiones para mejor rendimiento
-const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+// Crear pool de conexiones para PostgreSQL (Supabase)
+const pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
+
+// Emular la interfaz de mysql2 para no romper otros archivos
+const pool = {
+    query: async (sql, params) => {
+        const result = await pgPool.query(sql, params);
+        return [result.rows, result.fields];
+    },
+    getConnection: async () => {
+        const client = await pgPool.connect();
+        return {
+            release: () => client.release()
+        };
+    }
+};
 
 // Función para probar la conexión
 const testConnection = async () => {
     try {
         const connection = await pool.getConnection();
-        console.log('✅ Conexión a MySQL establecida correctamente');
+        console.log('✅ Conexión a PostgreSQL (Supabase) establecida correctamente');
         connection.release();
     } catch (error) {
-        console.error('❌ Error al conectar con MySQL:', error.message);
+        console.error('❌ Error al conectar con PostgreSQL:', error.message);
         process.exit(1);
     }
 };

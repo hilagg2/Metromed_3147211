@@ -5,7 +5,7 @@ const getUsuarios = async (req, res) => {
     try {
         const [usuarios] = await pool.query(
             `SELECT id_usuario as id, nombre, correo, 
-            CASE WHEN id_rol = 2 THEN 'administrador' ELSE 'usuario' END as rol,
+            CASE WHEN id_rol = 1 THEN 'administrador' ELSE 'usuario' END as rol,
             'activo' as estado
             FROM usuarios`
         );
@@ -19,11 +19,11 @@ const getUsuarios = async (req, res) => {
 const createUsuario = async (req, res) => {
     const { nombre, correo, rol, password } = req.body;
     try {
-        const id_rol = rol === 'administrador' ? 2 : 1;
+        const id_rol = rol === 'administrador' ? 1 : 2;
         const hashedPassword = await bcrypt.hash(password || '123456', 10);
         
         await pool.query(
-            'INSERT INTO usuarios (id_rol, nombre, correo, contrasena, fecha_registro, verificado) VALUES (?, ?, ?, ?, NOW(), 1)',
+            'INSERT INTO usuarios (id_rol, nombre, correo, contrasena, fecha_registro, verificado) VALUES ($1, $2, $3, $4, NOW(), 1)',
             [id_rol, nombre, correo, hashedPassword]
         );
         
@@ -38,17 +38,17 @@ const updateUsuario = async (req, res) => {
     const { id } = req.params;
     const { nombre, correo, rol, password } = req.body;
     try {
-        const id_rol = rol === 'administrador' ? 2 : 1;
+        const id_rol = rol === 'administrador' ? 1 : 2;
         
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
             await pool.query(
-                'UPDATE usuarios SET id_rol = ?, nombre = ?, correo = ?, contrasena = ? WHERE id_usuario = ?',
+                'UPDATE usuarios SET id_rol = $1, nombre = $2, correo = $3, contrasena = $4 WHERE id_usuario = $5',
                 [id_rol, nombre, correo, hashedPassword, id]
             );
         } else {
             await pool.query(
-                'UPDATE usuarios SET id_rol = ?, nombre = ?, correo = ? WHERE id_usuario = ?',
+                'UPDATE usuarios SET id_rol = $1, nombre = $2, correo = $3 WHERE id_usuario = $4',
                 [id_rol, nombre, correo, id]
             );
         }
@@ -63,7 +63,7 @@ const updateUsuario = async (req, res) => {
 const deleteUsuario = async (req, res) => {
     const { id } = req.params;
     try {
-        await pool.query('DELETE FROM usuarios WHERE id_usuario = ?', [id]);
+        await pool.query('DELETE FROM usuarios WHERE id_usuario = $1', [id]);
         res.json({ message: 'Usuario eliminado exitosamente' });
     } catch (error) {
         console.error('Error al eliminar usuario:', error);
