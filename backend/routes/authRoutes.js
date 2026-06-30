@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const { verifyToken } = require('../middleware/auth');
 const {
     register,
     login,
     forgotPassword,
     verifyCode,
-    resetPassword
+    resetPassword,
+    getProfile
 } = require('../controllers/authController');
 
 const {
@@ -71,5 +73,12 @@ router.post('/reset-password',
     handleValidationErrors,
     resetPassword
 );
+
+/**
+ * @route   GET /api/auth/profile
+ * @desc    Obtener perfil del usuario autenticado
+ * @access  Private (JWT Token requerido)
+ */
+router.get('/profile', verifyToken, getProfile);
 
 module.exports = router;

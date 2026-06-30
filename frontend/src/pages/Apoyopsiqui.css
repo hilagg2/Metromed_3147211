@@ -1,4 +1,5 @@
 .apoyo-container {
+    --primary-green: var(--primary, #00ff88);
     padding: 2rem;
     color: var(--text-light);
     height: 100%;

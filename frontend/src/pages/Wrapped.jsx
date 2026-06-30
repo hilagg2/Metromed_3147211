@@ -1,27 +1,46 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import html2canvas from 'html2canvas';
 import './wrapped.css';
 
-const Wrapped = ({ userId }) => {
+const Wrapped = () => {
     const doughnutChartRef = useRef(null);
     const lineChartRef = useRef(null);
     const wrappedCardRef = useRef(null);
     const chartInstances = useRef([]);
 
-    // Datos simulados
-    const simulatedData = {
-        totalSessions: 24,
-        entries: 12,
-        alertsViewed: 3,
-        daysActive: 8,
-        chatInteractions: 5,
-        congestion: { bajo: 60, medio: 30, alto: 10 },
-        last7: [2, 3, 4, 1, 5, 6, 3]
-    };
+    const [wrappedData, setWrappedData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    // Inicializar gráficos
+    // Obtener ID de usuario logueado
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const userId = storedUser.id_usuario || storedUser.id || 1;
+
     useEffect(() => {
+        const fetchWrappedData = async () => {
+            try {
+                const response = await fetch(`http://localhost:5000/api/usuarios/${userId}/wrapped`);
+                if (!response.ok) {
+                    throw new Error('Error al obtener los datos del Wrapped');
+                }
+                const result = await response.json();
+                setWrappedData(result);
+            } catch (err) {
+                console.error(err);
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchWrappedData();
+    }, [userId]);
+
+    // Inicializar gráficos y contadores cuando se carguen los datos
+    useEffect(() => {
+        if (!wrappedData) return;
+
         const initCharts = () => {
             // Limpiar gráficos anteriores
             chartInstances.current.forEach(chart => chart.destroy());
@@ -35,7 +54,7 @@ const Wrapped = ({ userId }) => {
                     data: {
                         labels: ['Bajo', 'Medio', 'Alto'],
                         datasets: [{
-                            data: [simulatedData.congestion.bajo, simulatedData.congestion.medio, simulatedData.congestion.alto],
+                            data: [wrappedData.congestion.bajo, wrappedData.congestion.medio, wrappedData.congestion.alto],
                             backgroundColor: ['#00ff88', '#f1c40f', '#e74c3c'],
                             hoverOffset: 4,
                             borderWidth: 0
@@ -68,7 +87,7 @@ const Wrapped = ({ userId }) => {
                         labels: ['6d', '5d', '4d', '3d', '2d', '1d', 'Hoy'],
                         datasets: [{
                             label: 'Actividad',
-                            data: simulatedData.last7,
+                            data: wrappedData.last7,
                             fill: true,
                             backgroundColor: 'rgba(0, 255, 136, 0.12)',
                             borderColor: '#00ff88',
@@ -131,58 +150,56 @@ const Wrapped = ({ userId }) => {
                 }, 20);
             };
 
-            countUp('totalSessions', simulatedData.totalSessions);
-            countUp('entriesCount', simulatedData.entries);
-            countUp('alertsCount', simulatedData.alertsViewed);
-            countUp('daysActive', simulatedData.daysActive);
-            countUp('chatInteractions', simulatedData.chatInteractions);
+            countUp('totalSessions', wrappedData.totalSessions);
+            countUp('entriesCount', wrappedData.entries);
+            countUp('alertsCount', wrappedData.alertsViewed);
+            countUp('daysActive', wrappedData.daysActive);
+            countUp('chatInteractions', wrappedData.chatInteractions);
         };
 
         setTimeout(animateNumbers, 500);
+
+        // Generar heatmap
+        const generateHeatmap = () => {
+            const heatEl = document.getElementById('heatmap');
+            if (!heatEl) return;
+
+            heatEl.innerHTML = '';
+            const morning = wrappedData.last7.slice(0, 3).reduce((a, b) => a + b, 0);
+            const midday = wrappedData.last7.slice(3, 5).reduce((a, b) => a + b, 0);
+            const evening = wrappedData.last7.slice(5, 7).reduce((a, b) => a + b, 0);
+
+            const arr = [
+                { label: 'Mañana', v: morning },
+                { label: 'Tarde', v: midday },
+                { label: 'Noche', v: evening }
+            ];
+
+            const maxVal = Math.max(...arr.map(x => x.v), 1);
+
+            arr.forEach(x => {
+                const el = document.createElement('div');
+                const intensity = Math.round((x.v / maxVal) * 220);
+                el.className = 'heat-cell';
+                el.style.background = `linear-gradient(135deg, 
+            rgba(40, ${120 + Math.round(intensity / 2)}, 40, 0.2), 
+            rgba(${20 + Math.round(intensity / 3)}, ${60 + Math.round(intensity / 3)}, 20, 0.3)
+          )`;
+                el.innerHTML = `
+            <div style="font-weight:700">${x.label}</div>
+            <div class="small-muted">${x.v} activ.</div>
+          `;
+                heatEl.appendChild(el);
+            });
+        };
+
+        generateHeatmap();
 
         // Limpiar gráficos al desmontar
         return () => {
             chartInstances.current.forEach(chart => chart.destroy());
         };
-    }, []);
-
-    // Generar heatmap
-    const generateHeatmap = () => {
-        const heatEl = document.getElementById('heatmap');
-        if (!heatEl) return;
-
-        heatEl.innerHTML = '';
-        const morning = simulatedData.last7.slice(0, 3).reduce((a, b) => a + b, 0);
-        const midday = simulatedData.last7.slice(3, 5).reduce((a, b) => a + b, 0);
-        const evening = simulatedData.last7.slice(5, 7).reduce((a, b) => a + b, 0);
-
-        const arr = [
-            { label: 'Mañana', v: morning },
-            { label: 'Tarde', v: midday },
-            { label: 'Noche', v: evening }
-        ];
-
-        const maxVal = Math.max(...arr.map(x => x.v), 1);
-
-        arr.forEach(x => {
-            const el = document.createElement('div');
-            const intensity = Math.round((x.v / maxVal) * 220);
-            el.className = 'heat-cell';
-            el.style.background = `linear-gradient(135deg, 
-        rgba(40, ${120 + Math.round(intensity / 2)}, 40, 0.2), 
-        rgba(${20 + Math.round(intensity / 3)}, ${60 + Math.round(intensity / 3)}, 20, 0.3)
-      )`;
-            el.innerHTML = `
-        <div style="font-weight:700">${x.label}</div>
-        <div class="small-muted">${x.v} activ.</div>
-      `;
-            heatEl.appendChild(el);
-        });
-    };
-
-    useEffect(() => {
-        generateHeatmap();
-    }, []);
+    }, [wrappedData]);
 
     // Descargar como imagen
     const downloadAsImage = async () => {
@@ -269,13 +286,31 @@ const Wrapped = ({ userId }) => {
         { title: 'Constante', desc: '8 días activos', color: '#00a86b' }
     ];
 
+    if (loading) {
+        return (
+            <div className="wrapped-loading" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', color: '#00ff88', flexDirection: 'column', gap: '1rem' }}>
+                <i className="fas fa-circle-notch fa-spin" style={{ fontSize: '3rem' }}></i>
+                <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Cargando tu Wrapped de MetroMed...</p>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="wrapped-error" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', color: '#e74c3c', flexDirection: 'column', gap: '1rem' }}>
+                <i className="fas fa-exclamation-triangle" style={{ fontSize: '3rem' }}></i>
+                <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Error: {error}</p>
+            </div>
+        );
+    }
+
     return (
         <div id="wrapped" className="wrapped-section">
             <div className="wrapped" id="wrappedCard" ref={wrappedCardRef}>
                 {/* HERO */}
-                <div className="hero mb-4">
+                <div className="wrapped-hero mb-4">
                     <div>
-                        <div className="small-muted">Tu Wrapped — Metro de Medellín</div>
+                        <div className="small-muted">Wrapped de {wrappedData?.nombre} — Metro de Medellín</div>
                         <div className="big-num" id="totalSessions">0</div>
                         <div className="small-muted">Sesiones este mes</div>
                     </div>

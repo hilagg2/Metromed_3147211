@@ -32,13 +32,20 @@ const Dashboard_admin = () => {
                 <nav className="sidebar-nav">
                     <div className="nav-section-label">Principal</div>
 
-                    {/* Al hacer click redirige a la página de gestión de usuarios */}
                     <div
                         className="nav-item"
                         onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}
                     >
                         <i className="fas fa-users nav-icon" />
                         Gestión de Usuarios
+                    </div>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/Dashboard/juegos'); }}
+                    >
+                        <i className="fas fa-gamepad nav-icon" />
+                        Gestión de Juegos
                     </div>
 
                     <div

@@ -94,7 +94,7 @@ const login = async (req, res) => {
                 rol: user.id_rol
             },
             process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRE }
+            { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
         );
 
         // RF-05: Retornar token y datos del usuario
@@ -331,10 +331,41 @@ const resetPassword = async (req, res) => {
     }
 };
 
+/**
+ * Obtener perfil del usuario autenticado
+ * GET /api/auth/profile
+ */
+const getProfile = async (req, res) => {
+    try {
+        const userId = req.user.id_usuario;
+        const [rows] = await pool.query(
+            'SELECT id_usuario, nombre, correo, fecha_registro, saldo_metrocoins, id_rol FROM usuarios WHERE id_usuario = $1',
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario no encontrado'
+            });
+        }
+
+        // Devolver el objeto de usuario directamente
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error al obtener perfil:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener el perfil del usuario'
+        });
+    }
+};
+
 module.exports = {
     register,
     login,
     forgotPassword,
     verifyCode,
-    resetPassword
+    resetPassword,
+    getProfile
 };

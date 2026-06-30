@@ -1,4 +1,4 @@
-/* Wrapped.css - Estilos para el resumen anual */
+/* wrapped.css - Estilos para el resumen anual */
 
 /* Variables locales para el componente */
 .wrapped-section {
@@ -73,15 +73,23 @@
 }
 
 /* Hero Section */
-.hero {
+.wrapped-hero {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding-bottom: 20px;
+    align-items: flex-start;
+    padding: 24px;
     border-bottom: 2px solid rgba(0, 255, 136, 0.2);
     margin-bottom: 2rem;
     flex-wrap: wrap;
     gap: 20px;
+    background: rgba(15, 15, 15, 0.6);
+    background-image: none !important;
+    border-radius: 16px;
+}
+
+.hero-stats {
+    flex: 1;
+    min-width: 200px;
 }
 
 .big-num {
@@ -102,9 +110,33 @@
 
 .hero-right {
     display: flex;
-    align-items: center;
-    gap: 20px;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 16px;
+    min-width: 220px;
+}
+
+.badges {
+    display: flex;
+    gap: 8px;
     flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.badge-metro {
+    background: rgba(0, 255, 136, 0.12);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    color: #00ff88;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.hero-actions {
+    display: flex;
+    gap: 10px;
 }
 
 .metrocoin-display {
@@ -234,7 +266,22 @@
     white-space: nowrap;
 }
 
-/* Achievements */
+/* Achievements / Badges */
+.badge-item {
+    background: rgba(40, 40, 40, 0.4);
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: transform 0.2s ease;
+}
+
+.badge-item:hover {
+    transform: translateX(5px);
+    background: rgba(40, 40, 40, 0.6);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
 .achievement-item {
     display: flex;
     align-items: center;
@@ -273,6 +320,17 @@
 }
 
 .achievement-desc {
+    line-height: 1.4;
+}
+
+/* Chat Snippets */
+.chat-snippet {
+    background: rgba(40, 40, 40, 0.4);
+    padding: 12px 15px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border-left: 3px solid #00ff88;
+    font-size: 0.9rem;
     line-height: 1.4;
 }
 
@@ -357,7 +415,7 @@
 }
 
 /* ==========================================
-   GRID SYSTEM (Restored for Layout Support)
+   GRID SYSTEM
    ========================================== */
 .row {
     display: flex;
@@ -397,6 +455,14 @@
     max-width: 100%;
 }
 
+.d-flex {
+    display: flex;
+}
+
+.justify-content-between {
+    justify-content: space-between;
+}
+
 @media (min-width: 768px) {
     .col-md-5 {
         flex: 0 0 41.666667%;
@@ -426,17 +492,23 @@
     }
 }
 
-/* Responsive Adjusments */
+/* Responsive Adjustments */
 @media (max-width: 768px) {
-    .hero {
+    .wrapped-hero {
         flex-direction: column;
         align-items: center;
         text-align: center;
     }
 
     .hero-right {
+        align-items: center;
+        width: 100%;
+    }
+
+    .badges,
+    .hero-actions {
         justify-content: center;
-        flex-direction: column;
+        width: 100%;
     }
 
     .chart-card {
@@ -476,4 +548,8 @@
 
 .text-warning {
     color: #f1c40f !important;
+}
+
+.text-center {
+    text-align: center;
 }

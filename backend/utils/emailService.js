@@ -20,6 +20,17 @@ const transporter = nodemailer.createTransport({
  */
 const sendVerificationCode = async (email, code, nombre) => {
     try {
+        // Simular envío de correo en modo desarrollo si no hay SMTP real configurado
+        if (process.env.EMAIL_HOST === 'smtp.example.com' || !process.env.EMAIL_HOST) {
+            console.log('\n' + '='.repeat(50));
+            console.log(`📧 [MODO DESARROLLO] Simulación de envío de correo`);
+            console.log(`Destinatario: ${email}`);
+            console.log(`Asunto: Código de Recuperación de Contraseña`);
+            console.log(`CÓDIGO SECRETO: ${code}`);
+            console.log('='.repeat(50) + '\n');
+            return { success: true, messageId: 'simulated_dev_id_' + Date.now() };
+        }
+
         const mailOptions = {
             from: `"MetroMed" <${process.env.EMAIL_USER}>`,
             to: email,
