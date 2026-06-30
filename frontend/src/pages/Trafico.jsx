@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './Trafico.css';
+import {
+    getCongestionData,
+    reportarCongestion,
+    getSuscripcion,
+    updateSuscripcion
+} from '../services/congestionService';
 
 const Trafico = ({ onBack }) => {
     const mapRef = useRef(null);
@@ -10,14 +16,26 @@ const Trafico = ({ onBack }) => {
     const [estaciones, setEstaciones] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Preferencias de Notificaciones (RF-24, RF-25)
+    const [recibirCorreo, setRecibirCorreo] = useState(true);
+    const [recibirPush, setRecibirPush] = useState(true);
+
+    // Filtro de resumen de líneas (RF-22)
+    const [activeSummaryLine, setActiveSummaryLine] = useState('lineaA'); // lineaA, lineaB, metrocable
+
     const fetchCongestionData = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/congestion');
-            if (!response.ok) throw new Error('Error al obtener datos de congestión');
-            const data = await response.json();
+            const data = await getCongestionData();
             setEstaciones(data.estaciones);
             setUpdateTime(new Date(data.updateTime));
             setTrafficLevel(data.isPeakHour ? 'alto' : 'normal');
+
+            // Actualizar la estación seleccionada si está abierta para refrescar su estado
+            if (selectedStation) {
+                const todas = [...data.estaciones.lineaA, ...data.estaciones.lineaB, ...data.estaciones.metrocable];
+                const actual = todas.find(e => e.nombre === selectedStation.nombre);
+                if (actual) setSelectedStation(actual);
+            }
         } catch (error) {
             console.error('Error fetching congestion:', error);
         } finally {
@@ -25,8 +43,19 @@ const Trafico = ({ onBack }) => {
         }
     };
 
+    const fetchSuscripcionData = async () => {
+        try {
+            const sub = await getSuscripcion();
+            setRecibirCorreo(sub.recibir_correo);
+            setRecibirPush(sub.recibir_push);
+        } catch (error) {
+            console.error('Error fetching subscription:', error);
+        }
+    };
+
     useEffect(() => {
         fetchCongestionData();
+        fetchSuscripcionData();
     }, []);
 
     useEffect(() => {
@@ -34,7 +63,6 @@ const Trafico = ({ onBack }) => {
 
         // Cargar Leaflet.js de forma dinámica
         const loadLeaflet = () => {
-            // Cargar CSS
             if (!document.getElementById('leaflet-css')) {
                 const link = document.createElement('link');
                 link.id = 'leaflet-css';
@@ -43,7 +71,6 @@ const Trafico = ({ onBack }) => {
                 document.head.appendChild(link);
             }
 
-            // Cargar JS
             if (!window.L) {
                 const script = document.createElement('script');
                 script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -63,7 +90,6 @@ const Trafico = ({ onBack }) => {
                 const map = L.map(mapRef.current).setView([6.2476, -75.5658], 13);
                 mapInstance.current = map;
 
-                // Cargar mapa base en modo oscuro (CartoDB Dark Matter)
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                     subdomains: 'abcd',
@@ -108,7 +134,6 @@ const Trafico = ({ onBack }) => {
                         const color = est.estado === 'alto' ? '#e74c3c' : 
                                       est.estado === 'medio' ? '#f39c12' : '#2ecc71';
                         
-                        // Marcador circular de Leaflet
                         const marker = L.circleMarker([est.lat, est.lng], {
                             radius: 8,
                             fillColor: color,
@@ -118,7 +143,6 @@ const Trafico = ({ onBack }) => {
                             fillOpacity: 0.9
                         }).addTo(map);
 
-                        // Popup del marcador
                         marker.bindPopup(`
                             <div style="color: #000; font-family: Arial, sans-serif; min-width: 150px; padding: 5px;">
                                 <h4 style="margin: 0 0 6px 0; color: ${color}; font-size: 1.1em; font-weight: bold;">${est.nombre}</h4>
@@ -133,7 +157,6 @@ const Trafico = ({ onBack }) => {
                             </div>
                         `);
 
-                        // Evento de clic
                         marker.on('click', () => {
                             setSelectedStation(est);
                         });
@@ -159,15 +182,41 @@ const Trafico = ({ onBack }) => {
     const getEstadoGlobal = () => {
         if (!estaciones) return { nivel: 'bajo', texto: 'Cargando...', color: '#999' };
         const todasEstaciones = [...estaciones.lineaA, ...estaciones.lineaB, ...estaciones.metrocable];
-        const altoCount = todasEstaciones.filter(e => e.estado === 'alto').length;
-        const medioCount = todasEstaciones.filter(e => e.estado === 'medio').length;
-        
-        if (altoCount > 5) return { nivel: 'alto', texto: 'Alta congestión', color: '#e74c3c' };
-        if (medioCount > 8 || altoCount > 2) return { nivel: 'medio', texto: 'Congestión moderada', color: '#f39c12' };
-        return { nivel: 'bajo', texto: 'Flujo normal', color: '#2ecc71' };
+        const countAlto = todasEstaciones.filter(e => e.estado === 'alto').length;
+        const countMedio = todasEstaciones.filter(e => e.estado === 'medio').length;
+
+        if (countAlto > 3) return { nivel: 'alto', texto: 'Alta congestión global', color: '#e74c3c' };
+        if (countMedio > 5 || countAlto > 0) return { nivel: 'medio', texto: 'Retrasos moderados', color: '#f39c12' };
+        return { nivel: 'bajo', texto: 'Flujo normal y ágil', color: '#2ecc71' };
     };
 
     const estadoGlobal = getEstadoGlobal();
+
+    // Actualizar reporte de congestión en tiempo real (RF-21)
+    const handleReport = async (estado) => {
+        if (!selectedStation) return;
+        try {
+            const res = await reportarCongestion(selectedStation.nombre, estado);
+            if (res.success) {
+                alert(`¡Gracias! Has reportado congestión de nivel "${estado}" en la estación ${selectedStation.nombre}.`);
+                fetchCongestionData(); // Recargar datos
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error al reportar congestión');
+        }
+    };
+
+    // Cambiar configuración de suscripción (RF-25)
+    const handleToggleSubscriptions = async (correoVal, pushVal) => {
+        try {
+            await updateSuscripcion(correoVal, pushVal);
+            setRecibirCorreo(correoVal);
+            setRecibirPush(pushVal);
+        } catch (err) {
+            console.error('Error al actualizar suscripciones:', err);
+        }
+    };
 
     if (loading) {
         return (
@@ -244,102 +293,162 @@ const Trafico = ({ onBack }) => {
             <div className="map-container-full">
                 <div id="map-full" ref={mapRef}></div>
 
-                {/* Panel lateral con leyenda */}
-                <div className="trafico-sidebar">
+                {/* Panel lateral con leyenda, resumen y reportes */}
+                <div className="trafico-sidebar" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                    
+                    {/* Sección 1: Leyenda */}
                     <div className="sidebar-section">
                         <h3 className="sidebar-title">
                             <i className="fas fa-info-circle"></i>
-                            Leyenda
+                            Leyenda de Congestión
                         </h3>
                         <div className="trafico-legend">
                             <div className="legend-item">
                                 <div className="legend-color" style={{ background: '#2ecc71' }}></div>
                                 <div className="legend-text">
-                                    <span className="legend-label">Flujo Normal</span>
-                                    <span className="legend-desc">Sin retrasos</span>
+                                    <span className="legend-label" style={{ color: '#2ecc71' }}>Flujo Normal (Verde)</span>
                                 </div>
                             </div>
                             <div className="legend-item">
                                 <div className="legend-color" style={{ background: '#f39c12' }}></div>
                                 <div className="legend-text">
-                                    <span className="legend-label">Moderado</span>
-                                    <span className="legend-desc">Algunos retrasos</span>
+                                    <span className="legend-label" style={{ color: '#f39c12' }}>Moderado (Amarillo)</span>
                                 </div>
                             </div>
                             <div className="legend-item">
                                 <div className="legend-color" style={{ background: '#e74c3c' }}></div>
                                 <div className="legend-text">
-                                    <span className="legend-label">Alta Congestión</span>
-                                    <span className="legend-desc">Retrasos significativos</span>
+                                    <span className="legend-label" style={{ color: '#e74c3c' }}>Alta Congestión (Rojo)</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="sidebar-section">
+                    {/* Sección 2: Suscripción a notificaciones (RF-24, RF-25) */}
+                    <div className="sidebar-section subscription-card" style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <h3 className="sidebar-title">
-                            <i className="fas fa-route"></i>
-                            Líneas
+                            <i className="fas fa-bell"></i>
+                            Alertas y Suscripciones
                         </h3>
-                        <div className="lineas-info">
-                            <div className="linea-badge" style={{ borderLeft: '4px solid #2ecc71' }}>
-                                <div className="linea-name">Línea A</div>
-                                <div className="linea-stations">{estaciones.lineaA.length} estaciones</div>
-                            </div>
-                            <div className="linea-badge" style={{ borderLeft: '4px solid #3498db' }}>
-                                <div className="linea-name">Línea B</div>
-                                <div className="linea-stations">{estaciones.lineaB.length} estaciones</div>
-                            </div>
-                            <div className="linea-badge" style={{ borderLeft: '4px solid #9b59b6' }}>
-                                <div className="linea-name">Metrocable</div>
-                                <div className="linea-stations">{estaciones.metrocable.length} estaciones</div>
-                            </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={recibirCorreo}
+                                    onChange={(e) => handleToggleSubscriptions(e.target.checked, recibirPush)}
+                                />
+                                <span>Recibir alertas por correo</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={recibirPush}
+                                    onChange={(e) => handleToggleSubscriptions(recibirCorreo, e.target.checked)}
+                                />
+                                <span>Notificaciones emergentes</span>
+                            </label>
                         </div>
                     </div>
 
-                    {selectedStation && (
-                        <div className="sidebar-section station-detail">
+                    {/* Sección 3: Estación seleccionada & Reportar en tiempo real (RF-21) */}
+                    {selectedStation ? (
+                        <div className="sidebar-section station-detail" style={{ background: 'rgba(0, 255, 136, 0.05)', border: '1px solid rgba(0, 255, 136, 0.2)' }}>
                             <h3 className="sidebar-title">
                                 <i className="fas fa-location-dot"></i>
-                                Estación Seleccionada
+                                Detalles de Estación
                             </h3>
                             <div className="station-detail-card">
-                                <h4>{selectedStation.nombre}</h4>
-                                <div className="station-status">
+                                <h4 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>{selectedStation.nombre}</h4>
+                                <div className="station-status" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <span className="status-dot" style={{
+                                        display: 'inline-block',
+                                        width: '12px',
+                                        height: '12px',
+                                        borderRadius: '50%',
                                         background: selectedStation.estado === 'alto' ? '#e74c3c' :
                                                    selectedStation.estado === 'medio' ? '#f39c12' : '#2ecc71'
                                     }}></span>
-                                    <span>
-                                        {selectedStation.estado === 'alto' ? 'Alta congestión' :
-                                         selectedStation.estado === 'medio' ? 'Congestión moderada' : 'Flujo normal'}
+                                    <span style={{ fontWeight: 'bold' }}>
+                                        {selectedStation.estado === 'alto' ? '🔴 Alta congestión' :
+                                         selectedStation.estado === 'medio' ? '🟡 Congestión moderada' : '🟢 Flujo normal'}
                                     </span>
                                 </div>
-                                <p className="station-update">
-                                    Actualizado: {updateTime.toLocaleTimeString()}
-                                </p>
+
+                                <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#64748b', display: 'block', marginBottom: '0.5rem' }}>¿Ves algo diferente? ¡Reporta como pasajero!</span>
+                                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                        <button
+                                            onClick={() => handleReport('bajo')}
+                                            style={{ flex: 1, padding: '0.4rem 0.2rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: '#2ecc71', color: '#000', fontWeight: 'bold', fontSize: '0.8rem' }}
+                                        >
+                                            Normal
+                                        </button>
+                                        <button
+                                            onClick={() => handleReport('medio')}
+                                            style={{ flex: 1, padding: '0.4rem 0.2rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: '#f39c12', color: '#000', fontWeight: 'bold', fontSize: '0.8rem' }}
+                                        >
+                                            Medio
+                                        </button>
+                                        <button
+                                            onClick={() => handleReport('alto')}
+                                            style={{ flex: 1, padding: '0.4rem 0.2rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: '#e74c3c', color: '#fff', fontWeight: 'bold', fontSize: '0.8rem' }}
+                                        >
+                                            Alto
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
+                        </div>
+                    ) : (
+                        <div className="sidebar-section" style={{ textAlign: 'center', padding: '1rem', color: '#64748b', fontSize: '0.9rem' }}>
+                            <p>Haz clic en cualquier estación en el mapa para reportar tráfico o ver detalles.</p>
                         </div>
                     )}
 
-                    <div className="sidebar-section alerts-section">
+                    {/* Sección 4: Resumen de congestión por líneas (RF-22) */}
+                    <div className="sidebar-section">
                         <h3 className="sidebar-title">
-                            <i className="fas fa-exclamation-triangle"></i>
-                            Alertas Activas
+                            <i className="fas fa-route"></i>
+                            Resumen de Líneas
                         </h3>
-                        <div className="alert-item warning">
-                            <i className="fas fa-tools"></i>
-                            <div className="alert-content">
-                                <div className="alert-title">Mantenimiento programado</div>
-                                <div className="alert-desc">Línea B - Retrasos de 5-10 min</div>
-                            </div>
+                        <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem' }}>
+                            <button
+                                onClick={() => setActiveSummaryLine('lineaA')}
+                                style={{ flex: 1, background: activeSummaryLine === 'lineaA' ? 'rgba(0,255,136,0.1)' : 'transparent', border: `1px solid ${activeSummaryLine === 'lineaA' ? '#00ff88' : 'rgba(255,255,255,0.05)'}`, color: '#fff', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
+                            >
+                                Línea A
+                            </button>
+                            <button
+                                onClick={() => setActiveSummaryLine('lineaB')}
+                                style={{ flex: 1, background: activeSummaryLine === 'lineaB' ? 'rgba(52,152,219,0.1)' : 'transparent', border: `1px solid ${activeSummaryLine === 'lineaB' ? '#3498db' : 'rgba(255,255,255,0.05)'}`, color: '#fff', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
+                            >
+                                Línea B
+                            </button>
+                            <button
+                                onClick={() => setActiveSummaryLine('metrocable')}
+                                style={{ flex: 1, background: activeSummaryLine === 'metrocable' ? 'rgba(155,89,182,0.1)' : 'transparent', border: `1px solid ${activeSummaryLine === 'metrocable' ? '#9b59b6' : 'rgba(255,255,255,0.05)'}`, color: '#fff', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
+                            >
+                                Cable
+                            </button>
                         </div>
-                        <div className="alert-item info">
-                            <i className="fas fa-info-circle"></i>
-                            <div className="alert-content">
-                                <div className="alert-title">Hora pico</div>
-                                <div className="alert-desc">Mayor afluencia de pasajeros</div>
-                            </div>
+
+                        <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            {estaciones[activeSummaryLine].map(est => {
+                                const statusColor = est.estado === 'alto' ? '#e74c3c' :
+                                                    est.estado === 'medio' ? '#f39c12' : '#2ecc71';
+                                return (
+                                    <div
+                                        key={est.nombre}
+                                        onClick={() => setSelectedStation(est)}
+                                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
+                                    >
+                                        <span>{est.nombre}</span>
+                                        <span style={{ color: statusColor, fontWeight: 'bold' }}>
+                                            {est.estado === 'alto' ? 'Alto' : est.estado === 'medio' ? 'Medio' : 'Normal'}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -391,7 +500,7 @@ const Trafico = ({ onBack }) => {
                         <i className="fas fa-clock" style={{ color: '#3498db' }}></i>
                     </div>
                     <div className="stat-content">
-                        <div className="stat-value">~8 min</div>
+                        <div className="stat-value">~5 min</div>
                         <div className="stat-label">Tiempo promedio de espera</div>
                     </div>
                 </div>

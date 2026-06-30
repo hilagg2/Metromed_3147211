@@ -139,6 +139,37 @@ const sendVerificationCode = async (email, code, nombre) => {
     }
 };
 
+const sendCongestionNotification = async (email, stationName, level, nombre) => {
+    try {
+        if (process.env.EMAIL_HOST === 'smtp.example.com' || !process.env.EMAIL_HOST) {
+            console.log('\n' + '='.repeat(50));
+            console.log(`📧 [MODO DESARROLLO] Notificación de Congestión Enviada`);
+            console.log(`Destinatario: ${email}`);
+            console.log(`Asunto: Alerta de Congestión en Estación ${stationName}`);
+            console.log(`Mensaje: Hola ${nombre || 'Usuario'}. Se ha reportado una congestión de nivel ${level} en la estación ${stationName}.`);
+            console.log('='.repeat(50) + '\n');
+            return { success: true };
+        }
+
+        const mailOptions = {
+            from: `"MetroMed" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: `⚠️ Alerta de Congestión: Estación ${stationName}`,
+            html: `<p>Hola ${nombre || 'Usuario'},</p>
+                   <p>Te informamos que se ha reportado <strong>Alta Congestión (🔴)</strong> en la estación <strong>${stationName}</strong> de la red del Metro.</p>
+                   <p>Te sugerimos tomar vías alternas o salir con anticipación.</p>
+                   <p>Atentamente,<br/><strong>El Equipo de MetroMed</strong></p>`
+        };
+
+        await transporter.sendMail(mailOptions);
+        return { success: true };
+    } catch (err) {
+        console.error('Error enviando mail de congestión:', err);
+        return { success: false, error: err.message };
+    }
+};
+
 module.exports = {
-    sendVerificationCode
+    sendVerificationCode,
+    sendCongestionNotification
 };

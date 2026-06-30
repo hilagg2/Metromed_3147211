@@ -1,28 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout, getProfile } from '../services/authService';
+import { getNotificaciones, marcarNotificacionesLeidas } from '../services/congestionService';
 import './Dashboard.css';
 
 const Dashboard = () => {
     // Estados
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [profile, setProfile] = useState(null);
+    const [notifs, setNotifs] = useState([]);
+    const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+    const [toastMessage, setToastMessage] = useState(null);
+    const lastNotifIdRef = useRef(null);
+
     const navigate = useNavigate();
     const location = useLocation();
 
     // Obtener datos del usuario de localStorage como fallback inicial
     const user = JSON.parse(localStorage.getItem('user') || '{"nombre": "Usuario", "correo": "usuario@metromed.com"}');
 
-    useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const data = await getProfile();
-                setProfile(data);
-            } catch (err) {
-                console.error('Error fetching profile in dashboard:', err);
+    const fetchProfile = async () => {
+        try {
+            const data = await getProfile();
+            setProfile(data);
+        } catch (err) {
+            console.error('Error fetching profile in dashboard:', err);
+        }
+    };
+
+    const fetchNotifications = async () => {
+        try {
+            const list = await getNotificaciones();
+            setNotifs(list || []);
+            
+            // Mostrar toast si llega una nueva alerta no leída
+            const unread = list.filter(n => !n.leida);
+            if (unread.length > 0) {
+                const newest = unread[0];
+                if (newest.id_notificacion !== lastNotifIdRef.current) {
+                    lastNotifIdRef.current = newest.id_notificacion;
+                    setToastMessage(newest.mensaje);
+                    setTimeout(() => setToastMessage(null), 6000);
+                }
             }
-        };
+        } catch (err) {
+            console.error('Error fetching notifications:', err);
+        }
+    };
+
+    useEffect(() => {
         fetchProfile();
+        fetchNotifications();
+        // Encuesta de notificaciones cada 15 segundos
+        const interval = setInterval(fetchNotifications, 15000);
+        return () => clearInterval(interval);
     }, [location.pathname]); // Refrescar cuando navega
 
     const activeUser = profile || user;
@@ -130,10 +161,38 @@ const Dashboard = () => {
                 </div>
             </nav>
 
+            {/* Pop-up Toast de Notificación (RF-23) */}
+            {toastMessage && (
+                <div style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    background: 'rgba(231, 76, 60, 0.95)',
+                    border: '1px solid #e74c3c',
+                    backdropFilter: 'blur(10px)',
+                    color: '#fff',
+                    padding: '1rem 1.5rem',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    maxWidth: '350px'
+                }}>
+                    <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.2rem', color: '#fff' }}></i>
+                    <div style={{ flexGrow: 1 }}>
+                        <strong style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.2rem' }}>Alerta de Congestión</strong>
+                        <span style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>{toastMessage}</span>
+                    </div>
+                    <button onClick={() => setToastMessage(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', padding: '0 0.2rem' }}>&times;</button>
+                </div>
+            )}
+
             {/* Header superior */}
             <header className="top-header">
                 <div className="welcome-text">
-                    <i className="fas fa-gamepad"></i> Bienvenido al MetroHub
+                    <i className="fas fa-subway"></i> Bienvenido al MetroHub
                 </div>
 
                 <div className="search-bar-container">
@@ -144,9 +203,85 @@ const Dashboard = () => {
                     />
                 </div>
 
-                <div className="profile-section">
+                <div className="profile-section" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', position: 'relative' }}>
+                    {/* Bell Icon for Notifications (RF-23, RF-26) */}
+                    <div className="bell-container" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowNotifDropdown(!showNotifDropdown)}>
+                        <i className="fas fa-bell" style={{ fontSize: '1.3rem', color: unreadCount > 0 ? '#ffcc00' : 'rgba(255,255,255,0.7)' }}></i>
+                        {unreadCount > 0 && (
+                            <span className="badge" style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-6px',
+                                background: '#e74c3c',
+                                color: '#fff',
+                                borderRadius: '50%',
+                                width: '16px',
+                                height: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.65rem',
+                                fontWeight: 'bold'
+                            }}>
+                                {unreadCount}
+                            </span>
+                        )}
+
+                        {showNotifDropdown && (
+                            <div className="notif-dropdown" style={{
+                                position: 'absolute',
+                                top: '35px',
+                                right: '-60px',
+                                background: 'rgba(20,20,30,0.98)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: '12px',
+                                width: '320px',
+                                maxHeight: '350px',
+                                overflowY: 'auto',
+                                zIndex: 10000,
+                                boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+                                padding: '1rem',
+                                cursor: 'default'
+                            }} onClick={(e) => e.stopPropagation()}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 'bold' }}>Alertas de Servicio ({unreadCount})</h4>
+                                    {unreadCount > 0 && (
+                                        <button
+                                            onClick={async () => {
+                                                await marcarNotificacionesLeidas();
+                                                fetchNotifications();
+                                            }}
+                                            style={{ background: 'transparent', border: 'none', color: '#00ff88', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}
+                                        >
+                                            Marcar leídas
+                                        </button>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    {notifs.length === 0 ? (
+                                        <p style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', padding: '1rem 0' }}>No hay alertas recientes</p>
+                                    ) : (
+                                        notifs.map(n => (
+                                            <div key={n.id_notificacion} style={{
+                                                padding: '0.6rem',
+                                                borderRadius: '8px',
+                                                background: n.leida ? 'transparent' : 'rgba(231,76,60,0.1)',
+                                                borderLeft: `3px solid ${n.leida ? 'rgba(255,255,255,0.1)' : '#e74c3c'}`,
+                                                fontSize: '0.8rem',
+                                                marginBottom: '0.25rem'
+                                            }}>
+                                                <p style={{ margin: '0 0 0.25rem 0', color: '#e2e8f0', lineHeight: '1.4' }}>{n.mensaje}</p>
+                                                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{new Date(n.fecha).toLocaleTimeString()}</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <NavLink to="/Dashboard/perfil" className="profile-pic" style={{ textDecoration: 'none' }}>
-                        {user.nombre ? user.nombre[0].toUpperCase() : 'U'}
+                        {activeUser.nombre ? activeUser.nombre[0].toUpperCase() : 'U'}
                     </NavLink>
                 </div>
             </header>

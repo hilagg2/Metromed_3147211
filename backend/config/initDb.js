@@ -77,6 +77,27 @@ const initDatabase = async () => {
             ON CONFLICT (pregunta) DO NOTHING
         `);
 
+        // 8. Crear tabla de historial de notificaciones
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS historial_notificaciones (
+                id_notificacion SERIAL PRIMARY KEY,
+                id_usuario INT NOT NULL,
+                tipo VARCHAR(50) NOT NULL,
+                mensaje TEXT NOT NULL,
+                leida BOOLEAN DEFAULT FALSE,
+                fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 9. Crear tabla de suscripciones a notificaciones
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS suscripcion_notificaciones (
+                id_usuario INT PRIMARY KEY,
+                recibir_correo BOOLEAN DEFAULT TRUE,
+                recibir_push BOOLEAN DEFAULT TRUE
+            )
+        `);
+
         console.log('✅ Database tables initialized successfully');
     } catch (error) {
         console.error('❌ Error initializing database tables:', error);
