@@ -4,6 +4,7 @@ import { logout } from '../services/authService';
 import './Dashboard_admin.css';
 
 const initials = (name = '') => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const Gestion_usuario = () => {
     const navigate = useNavigate();
@@ -22,7 +23,7 @@ const Gestion_usuario = () => {
     const fetchUsuarios = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/usuarios');
+            const res = await fetch(`${baseUrl}/api/usuarios`);
             if (!res.ok) throw new Error('Error al cargar usuarios');
             const data = await res.json();
             setUsuarios(data);
@@ -51,8 +52,8 @@ const Gestion_usuario = () => {
         setSaving(true);
         try {
             const url = editUser
-                ? `http://localhost:5000/api/usuarios/${editUser.id}`
-                : 'http://localhost:5000/api/usuarios';
+                ? `${baseUrl}/api/usuarios/${editUser.id}`
+                : `${baseUrl}/api/usuarios`;
             const method = editUser ? 'PUT' : 'POST';
             const body = { ...form };
             if (editUser && !body.password) delete body.password;
@@ -78,7 +79,7 @@ const Gestion_usuario = () => {
     const handleDelete = async (id) => {
         if (!window.confirm('¿Eliminar este usuario?')) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/usuarios/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${baseUrl}/api/usuarios/${id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error('Error al eliminar');
             fetchUsuarios();
         } catch (e) {

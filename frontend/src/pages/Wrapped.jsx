@@ -22,7 +22,8 @@ const Wrapped = () => {
         const fetchWrappedData = async () => {
             setLoading(true);
             try {
-                const response = await fetch(`http://localhost:5000/api/usuarios/${userId}/wrapped?periodo=${periodo}`);
+                const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                const response = await fetch(`${baseUrl}/api/usuarios/${userId}/wrapped?periodo=${periodo}`);
                 if (!response.ok) {
                     throw new Error('Error al obtener los datos del Wrapped');
                 }
