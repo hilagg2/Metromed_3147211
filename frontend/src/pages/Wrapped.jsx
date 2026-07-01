@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import html2canvas from 'html2canvas';
-import './wrapped.css';
+import './Wrapped.css';
 
 const Wrapped = () => {
     const doughnutChartRef = useRef(null);
