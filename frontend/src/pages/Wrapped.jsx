@@ -314,8 +314,8 @@ const Wrapped = () => {
                     <div>
                         <div className="d-flex align-items-center gap-2 mb-1">
                             <span className="small-muted">Wrapped de {wrappedData?.nombre} — Metro de Medellín</span>
-                            <select 
-                                value={periodo} 
+                            <select
+                                value={periodo}
                                 onChange={(e) => setPeriodo(e.target.value)}
                                 className="form-select form-select-sm period-select"
                                 style={{ width: 'auto', background: '#112233', color: '#fff', border: '1px solid #00ff88', fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}
@@ -453,7 +453,7 @@ const Wrapped = () => {
                         *Datos actualizados al {new Date().toLocaleDateString('es-MX')}
                     </p>
                     <p className="text-center mb-0">
-                        <small>Gracias por viajar con nosotros. ¡Nos vemos en 2025! 🚇</small>
+                        <small>Gracias por usar MetroMed. 🚇</small>
                     </p>
                 </div>
             </div>
