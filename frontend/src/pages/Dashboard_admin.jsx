@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../services/authService';
+import AdminAlertas from './AdminAlertas';
 import './Dashboard_admin.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -10,6 +11,7 @@ const Dashboard_admin = () => {
     const navigate = useNavigate();
     const adminUser = JSON.parse(localStorage.getItem('user') || '{}');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [activeSection, setActiveSection] = useState('dashboard');
 
     const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -32,6 +34,7 @@ const Dashboard_admin = () => {
                 <nav className="sidebar-nav">
                     <div className="nav-section-label">Principal</div>
 
+                    {/* Al hacer click redirige a la página de gestión de usuarios */}
                     <div
                         className="nav-item"
                         onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}
@@ -46,6 +49,15 @@ const Dashboard_admin = () => {
                     >
                         <i className="fas fa-gamepad nav-icon" />
                         Gestión de Juegos
+                    </div>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); setActiveSection('alertas'); }}
+                        style={{ background: activeSection === 'alertas' ? 'rgba(26,110,196,0.15)' : 'transparent', borderRadius: 8 }}
+                    >
+                        <i className="fas fa-bell nav-icon" />
+                        Gestión de Alertas
                     </div>
 
                     <div
@@ -96,14 +108,20 @@ const Dashboard_admin = () => {
                 </div>
             </header>
 
-            {/* ── Main ────────────────────────────────────────── */}
+            {/* ── Main ────────────────────────────────────────────── */}
             <main className="admin-main">
-                <div style={{ padding: '2rem', textAlign: 'center', marginTop: '5rem' }}>
-                    <i className="fas fa-th-large" style={{ fontSize: '3rem', opacity: 0.15, marginBottom: '1rem', display: 'block' }} />
-                    <p style={{ opacity: 0.4, color: 'var(--text-light)' }}>
-                        Selecciona una opción del menú lateral
-                    </p>
-                </div>
+                {activeSection === 'alertas' ? (
+                    <div style={{ padding: '2rem', background: '#0a1525', minHeight: '100%' }}>
+                        <AdminAlertas />
+                    </div>
+                ) : (
+                    <div style={{ padding: '2rem', textAlign: 'center', marginTop: '5rem' }}>
+                        <i className="fas fa-th-large" style={{ fontSize: '3rem', opacity: 0.15, marginBottom: '1rem', display: 'block' }} />
+                        <p style={{ opacity: 0.4, color: 'var(--text-light)' }}>
+                            Selecciona una opción del menú lateral
+                        </p>
+                    </div>
+                )}
             </main>
         </div>
     );

@@ -4,12 +4,36 @@ const dotenv = require('dotenv');
 const { testConnection, pool } = require('./config/database');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 
 // Cargar variables de entorno
 dotenv.config();
 
-// Crear aplicación Express
+// Crear aplicación Express y servidor HTTP
 const app = express();
+const httpServer = http.createServer(app);
+
+// Socket.io
+const io = new Server(httpServer, {
+    cors: {
+        origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+        credentials: true
+    }
+});
+
+app.set('io', io);
+
+io.on('connection', (socket) => {
+    const userId = socket.handshake.auth?.userId;
+    if (userId) {
+        socket.join(`user_${userId}`);
+        console.log(`🔔 Usuario ${userId} conectado al panel de alertas`);
+    }
+    socket.on('disconnect', () => {
+        if (userId) console.log(`🔕 Usuario ${userId} desconectado del panel de alertas`);
+    });
+});
 
 // Middleware
 app.use(cors({
@@ -25,11 +49,13 @@ const usuarioRoutes = require('./routes/usuarioRoutes');
 const juegoRoutes = require('./routes/juegoRoutes');
 const apoyoRoutes = require('./routes/apoyoRoutes');
 const congestionRoutes = require('./routes/congestionRoutes');
+const alertsRoutes = require('./routes/alertasRoutes');
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/juegos', juegoRoutes);
 app.use('/api/apoyo', apoyoRoutes);
 app.use('/api/congestion', congestionRoutes);
+app.use('/api/alerts', alertsRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -103,10 +129,11 @@ const startServer = async () => {
         }
 
         // Iniciar servidor
-        app.listen(PORT, () => {
+        httpServer.listen(PORT, () => {
             console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
             console.log(`📊 Modo: ${process.env.NODE_ENV || 'development'}`);
             console.log(`📡 Módulo de congestión activo en /api/congestion`);
+            console.log(`🔔 Socket.io listo para notificaciones en tiempo real`);
         });
     } catch (error) {
         console.error('❌ Error al iniciar el servidor:', error);

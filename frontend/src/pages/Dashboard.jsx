@@ -149,6 +149,11 @@ const Dashboard = () => {
                         path="/Dashboard/apoyo-psicologico"
                     />
                     <SidebarItem
+                        icon="fas fa-bell"
+                        text="Alertas"
+                        path="/Dashboard/notificaciones"
+                    />
+                    <SidebarItem
                         icon="fas fa-cog"
                         text="Configuración"
                         path="/Dashboard/configuracion"

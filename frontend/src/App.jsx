@@ -10,6 +10,7 @@ import AccessDenied from './pages/AccessDenied'
 import Trafico from './pages/Trafico'
 import Apoyopsiqui from './pages/Apoyopsiqui'
 import Perfil_admin from './pages/Perfil_admin'
+import UserNotificaciones from './pages/UserNotificaciones'
 
 // Secciones del Dashboard
 import Juegos from './pages/Juegos'
@@ -33,6 +34,7 @@ function App() {
                     <Route path="perfil" element={<Perfil />} />
                     <Route path="apoyo-psicologico" element={<Apoyopsiqui />} />
                     <Route path="configuracion" element={<Configuracion />} />
+                    <Route path="notificaciones" element={<UserNotificaciones />} />
                 </Route>
 
                 <Route path="/Dashboard_admin" element={<Dashboard_admin />} />
