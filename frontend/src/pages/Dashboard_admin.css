@@ -3,21 +3,21 @@
 :root {
     --primary: #00ff88;
     --primary-dim: rgba(0, 255, 136, 0.15);
-    --secondary: #3498db;
-    --accent-red: #e74c3c;
+    --secondary: #00b8ff;
+    --accent-red: #ff0055;
     --accent-yellow: #f39c12;
     --accent-purple: #9b59b6;
-    --dark-bg: #0a0a0a;
-    --card-bg: rgba(18, 18, 18, 0.97);
-    --card-border: rgba(255, 255, 255, 0.07);
-    --text-light: rgba(255, 255, 255, 0.55);
-    --text-mid: rgba(255, 255, 255, 0.8);
+    --dark-bg: #050a08;
+    --card-bg: rgba(5, 15, 10, 0.95);
+    --card-border: rgba(0, 255, 136, 0.15);
+    --text-light: rgba(255, 255, 255, 0.6);
+    --text-mid: rgba(255, 255, 255, 0.85);
     --text-white: #ffffff;
-    --gradient-1: linear-gradient(135deg, #00ff88 0%, #3498db 100%);
-    --gradient-admin: linear-gradient(135deg, #f39c12 0%, #e74c3c 100%);
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
-    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+    --gradient-1: linear-gradient(135deg, #00ff88 0%, #00b8ff 100%);
+    --gradient-admin: linear-gradient(135deg, #00ff88 0%, #008f51 100%);
+    --shadow-sm: 0 2px 10px rgba(0, 255, 136, 0.15);
+    --shadow-md: 0 6px 20px rgba(0, 255, 136, 0.25);
+    --shadow-lg: 0 12px 40px rgba(0, 255, 136, 0.4);
     --sidebar-w: 270px;
     --header-h: 72px;
     --radius: 14px;
@@ -54,13 +54,14 @@ body {
     left: 0;
     width: var(--sidebar-w);
     height: 100vh;
-    background: rgba(12, 12, 12, 0.99);
+    background: rgba(5, 15, 10, 0.99);
     border-right: 1px solid var(--card-border);
     display: flex;
     flex-direction: column;
     z-index: 1000;
     backdrop-filter: blur(20px);
     transition: transform 0.3s ease;
+    box-shadow: 4px 0 20px rgba(0,255,136,0.05);
 }
 
 .sidebar-brand {
@@ -99,16 +100,17 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: rgba(243, 156, 18, 0.15);
-    color: var(--accent-yellow);
-    border: 1px solid rgba(243, 156, 18, 0.3);
+    background: rgba(0, 255, 136, 0.15);
+    color: var(--primary);
+    border: 1px solid rgba(0, 255, 136, 0.3);
     padding: 0.25rem 0.75rem;
     border-radius: 50px;
     font-size: 0.7rem;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
     text-transform: uppercase;
     margin-top: 0.5rem;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
 }
 
 .sidebar-nav {
@@ -329,10 +331,11 @@ body {
     justify-content: center;
     font-weight: 800;
     font-size: 0.9rem;
-    color: #fff;
+    color: #050a08;
     cursor: pointer;
-    border: 2px solid rgba(243, 156, 18, 0.4);
+    border: 2px solid rgba(0, 255, 136, 0.5);
     flex-shrink: 0;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
 }
 
 /* ===========================
@@ -643,9 +646,10 @@ body {
 }
 
 .role-badge.admin {
-    background: rgba(243, 156, 18, 0.15);
-    color: var(--accent-yellow);
-    border: 1px solid rgba(243, 156, 18, 0.25);
+    background: rgba(0, 255, 136, 0.15);
+    color: var(--primary);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    box-shadow: 0 0 8px rgba(0, 255, 136, 0.2);
 }
 
 .role-badge.user {

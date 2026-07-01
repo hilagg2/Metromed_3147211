@@ -1,0 +1,345 @@
+/* UserNotificaciones.css - Tema Verde Futurista */
+
+.user-notif-container {
+    padding: 1.5rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.un-header {
+    background: rgba(5, 15, 10, 0.8);
+    border: 1px solid rgba(0, 255, 136, 0.15);
+    border-radius: 14px;
+    padding: 1.5rem 2rem;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0, 255, 136, 0.05);
+}
+
+.un-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #00ff88;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.un-subtitle {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+}
+
+.un-refresh-btn {
+    position: absolute;
+    top: 50%;
+    right: 2rem;
+    transform: translateY(-50%);
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    color: #00ff88;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.un-refresh-btn:hover {
+    background: rgba(0, 255, 136, 0.2);
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+}
+
+.un-content {
+    display: flex;
+    gap: 1.5rem;
+    flex: 1;
+    min-height: 500px;
+}
+
+/* LISTA DE ALERTAS */
+.un-list-section {
+    flex: 1;
+    max-width: 400px;
+    background: rgba(5, 15, 10, 0.6);
+    border: 1px solid rgba(0, 255, 136, 0.1);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.un-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.un-list::-webkit-scrollbar {
+    width: 6px;
+}
+.un-list::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 136, 0.2);
+    border-radius: 10px;
+}
+
+.un-empty, .un-loading {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.95rem;
+}
+
+.un-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.un-card {
+    background: rgba(10, 20, 15, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.un-card:hover {
+    background: rgba(0, 255, 136, 0.05);
+    border-color: rgba(0, 255, 136, 0.2);
+    transform: translateY(-2px);
+}
+
+.un-card.unread {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: rgba(0, 255, 136, 0.3);
+}
+
+.un-card.selected {
+    border-color: #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.15);
+    background: rgba(0, 255, 136, 0.15);
+}
+
+.un-card-indicator {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+}
+
+.un-card-body {
+    padding: 1rem 1rem 1rem 1.5rem;
+}
+
+.un-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.un-card-type {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.un-card-date {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.un-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.35rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.un-card-desc-short {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0;
+}
+
+/* DETALLE DE ALERTA */
+.un-detail-section {
+    flex: 2;
+    background: rgba(5, 15, 10, 0.8);
+    border: 1px solid rgba(0, 255, 136, 0.15);
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 0 20px rgba(0, 255, 136, 0.02);
+}
+
+.un-no-selection {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.3);
+    text-align: center;
+    padding: 2rem;
+}
+
+.un-no-selection i {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+    color: rgba(0, 255, 136, 0.1);
+}
+
+.un-detail-view {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.un-back-btn {
+    display: none;
+    background: transparent;
+    border: none;
+    color: #00b8ff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.un-detail-card {
+    background: rgba(10, 20, 15, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 2rem;
+}
+
+.un-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.un-detail-type {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.1rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.un-icon-large {
+    font-size: 1.75rem;
+}
+
+.un-detail-date {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+}
+
+.un-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.un-detail-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.un-detail-affected {
+    background: rgba(0, 255, 136, 0.05);
+    border-left: 3px solid #00ff88;
+    padding: 1rem 1.25rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.un-affected-label, .un-desc-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 0.5rem;
+}
+
+.un-affected-value {
+    color: #00ff88;
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.un-detail-desc {
+    background: rgba(255, 255, 255, 0.02);
+    padding: 1.25rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.un-desc-text {
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.6;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+}
+
+/* RESPONSIVE MÓVIL */
+@media (max-width: 900px) {
+    .un-header {
+        padding: 1.25rem;
+    }
+    
+    .un-refresh-btn {
+        position: static;
+        transform: none;
+        margin-top: 1rem;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .un-content {
+        flex-direction: column;
+    }
+    
+    .un-list-section {
+        max-width: 100%;
+    }
+    
+    .hide-on-mobile {
+        display: none !important;
+    }
+    
+    .un-back-btn {
+        display: flex;
+    }
+}
