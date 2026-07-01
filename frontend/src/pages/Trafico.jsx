@@ -1,247 +1,464 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { getEstaciones, enviarReporte, suscribirSSE, nivelToEstilo } from '../services/congestionService';
 import './Trafico.css';
-import {
-    getCongestionData,
-    reportarCongestion,
-    getSuscripcion,
-    updateSuscripcion
-} from '../services/congestionService';
+
+/**
+ * Trafico.jsx — Mapa de Congestión en Tiempo Real
+ *
+ * Integra:
+ *  - Datos reales desde la BD via GET /api/congestion/estaciones
+ *  - Actualizaciones automáticas vía SSE (RN-19.2, RN-19.3, RN-22.2)
+ *  - Panel de reporte para pasajeros (RN-19.1, RN-21.1)
+ *  - Algoritmo de validación colectiva en backend (RN-21.2)
+ *  - Colores Verde/Amarillo/Rojo uniformes (RN-20.3, RN-22.1, RN-22.3)
+ */
+
+// ─── Estructura Jerárquica de Estaciones (Orden Secuencial) ─────────────────
+// RN-Geo: Definición de Nodos y líneas para trazar los paths correctamente
+const estacionesMetro = {
+    'A': [
+        { id: 'Niquía', lat: 6.33785, lng: -75.54427 },
+        { id: 'Bello', lat: 6.329933, lng: -75.553708 },
+        { id: 'Madera', lat: 6.315850, lng: -75.555379 },
+        { id: 'Acevedo', lat: 6.299843, lng: -75.558614 },
+        { id: 'Tricentenario', lat: 6.290340, lng: -75.564717 },
+        { id: 'Caribe', lat: 6.278236, lng: -75.569479 },
+        { id: 'Universidad', lat: 6.269432, lng: -75.565903 },
+        { id: 'Hospital', lat: 6.263926, lng: -75.563512 },
+        { id: 'Prado', lat: 6.256779, lng: -75.566200 },
+        { id: 'Parque Berrío', lat: 6.250452, lng: -75.568237 },
+        { id: 'San Antonio', lat: 6.247133, lng: -75.569829 },
+        { id: 'Alpujarra', lat: 6.242903, lng: -75.571435 },
+        { id: 'Exposiciones', lat: 6.238359, lng: -75.573196 },
+        { id: 'Industriales', lat: 6.229965, lng: -75.575637 },
+        { id: 'Poblado', lat: 6.212682, lng: -75.578040 },
+        { id: 'Aguacatala', lat: 6.193801, lng: -75.581841 },
+        { id: 'Ayurá', lat: 6.186527, lng: -75.585438 },
+        { id: 'Envigado', lat: 6.174664, lng: -75.597085 },
+        { id: 'Itagüí', lat: 6.163239, lng: -75.605883 },
+        { id: 'Sabaneta', lat: 6.157431, lng: -75.616758 },
+        { id: 'La Estrella', lat: 6.152694, lng: -75.626479 }
+    ],
+    'B': [
+        { id: 'San Antonio', lat: 6.247133, lng: -75.569829 },
+        { id: 'Cisneros', lat: 6.248929, lng: -75.574847 },
+        { id: 'Suramericana', lat: 6.252988, lng: -75.582943 },
+        { id: 'Estadio', lat: 6.253308, lng: -75.588282 },
+        { id: 'Floresta', lat: 6.258671, lng: -75.597782 },
+        { id: 'Santa Lucía', lat: 6.258073, lng: -75.603772 },
+        { id: 'San Javier', lat: 6.256966, lng: -75.613932 }
+    ]
+};
+
+// Generamos un mapa rápido de coordenadas para mantener la compatibilidad con el resto del componente
+const COORDS_ESTACIONES = {};
+Object.entries(estacionesMetro).forEach(([linea, estaciones]) => {
+    estaciones.forEach(est => {
+        COORDS_ESTACIONES[est.id] = { lat: est.lat, lng: est.lng, linea };
+    });
+});
+
+// Extrae el nombre base de la estación desde la BD (que tiene "Estación X")
+const normalizarNombre = (nombreBD) =>
+    nombreBD.replace(/^Estaci[oó]n\s+/i, '').trim();
+
+// ─── Helpers Geometría (Haversine) ──────────────────────────────────────────
+const calcularDistancia = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Radio de la Tierra en metros
+    const rad = Math.PI / 180;
+    const φ1 = lat1 * rad, φ2 = lat2 * rad;
+    const Δφ = (lat2 - lat1) * rad;
+    const Δλ = (lon2 - lon1) * rad;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) *
+        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distancia en metros
+};
+
+// ─── Componente ───────────────────────────────────────────────────────────────
+
+const getUser = () => {
+    try {
+        const u = localStorage.getItem('user');
+        return u ? JSON.parse(u) : null;
+    } catch { return null; }
+};
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 const Trafico = ({ onBack }) => {
     const mapRef = useRef(null);
     const mapInstance = useRef(null);
+    const markersRef = useRef({});   // { id_estacion: google.maps.Marker }
+    const sseRef = useRef(null);
+
+    const [estaciones, setEstaciones] = useState([]);
     const [selectedStation, setSelectedStation] = useState(null);
-    const [trafficLevel, setTrafficLevel] = useState('normal');
     const [updateTime, setUpdateTime] = useState(new Date());
-    const [estaciones, setEstaciones] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [sseConectado, setSseConectado] = useState(false);
+    const [cargando, setCargando] = useState(true);
+    const [error, setError] = useState(null);
 
-    // Preferencias de Notificaciones (RF-24, RF-25)
-    const [recibirCorreo, setRecibirCorreo] = useState(true);
-    const [recibirPush, setRecibirPush] = useState(true);
+    // Panel de reporte
+    const [panelReporte, setPanelReporte] = useState(false);
+    const [reporteEstacion, setReporteEstacion] = useState('');
+    const [reporteNivel, setReporteNivel] = useState('MEDIO');
+    const [enviandoReporte, setEnviandoReporte] = useState(false);
+    const [mensajeReporte, setMensajeReporte] = useState(null);
 
-    // Filtro de resumen de líneas (RF-22)
-    const [activeSummaryLine, setActiveSummaryLine] = useState('lineaA'); // lineaA, lineaB, metrocable
+    // Ubicación del usuario
+    const [ubicacion, setUbicacion] = useState(null);
+    const [distanciaCercana, setDistanciaCercana] = useState(null);
+    const [distancias, setDistancias] = useState({}); // { id_estacion: distanciaEnMetros }
 
-    const fetchCongestionData = async () => {
-        try {
-            const data = await getCongestionData();
-            setEstaciones(data.estaciones);
-            setUpdateTime(new Date(data.updateTime));
-            setTrafficLevel(data.isPeakHour ? 'alto' : 'normal');
+    const user = getUser();
+    const esPasajero = user && Number(user.rol) === 2; // rol 2 es Usuario/Pasajero
 
-            // Actualizar la estación seleccionada si está abierta para refrescar su estado
-            if (selectedStation) {
-                const todas = [...data.estaciones.lineaA, ...data.estaciones.lineaB, ...data.estaciones.metrocable];
-                const actual = todas.find(e => e.nombre === selectedStation.nombre);
-                if (actual) setSelectedStation(actual);
+    // ── Encontrar estación más cercana ─────────────────────────────────────
+    const encontrarEstacionCercana = useCallback((lat, lng, listadoEstaciones) => {
+        let minimaDistancia = Infinity;
+        let estacionCercana = null;
+        const mapaDistancias = {};
+
+        listadoEstaciones.forEach(est => {
+            const nombreNormal = normalizarNombre(est.nombre_estacion);
+            const coords = COORDS_ESTACIONES[nombreNormal];
+            if (coords) {
+                const dist = calcularDistancia(lat, lng, coords.lat, coords.lng);
+                mapaDistancias[est.id_estacion] = Math.round(dist);
+                if (dist < minimaDistancia) {
+                    minimaDistancia = dist;
+                    estacionCercana = String(est.id_estacion);
+                }
             }
-        } catch (error) {
-            console.error('Error fetching congestion:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+        });
 
-    const fetchSuscripcionData = async () => {
-        try {
-            const sub = await getSuscripcion();
-            setRecibirCorreo(sub.recibir_correo);
-            setRecibirPush(sub.recibir_push);
-        } catch (error) {
-            console.error('Error fetching subscription:', error);
-        }
-    };
+        setDistancias(mapaDistancias);
 
-    useEffect(() => {
-        fetchCongestionData();
-        fetchSuscripcionData();
+        if (estacionCercana) {
+            setReporteEstacion(estacionCercana);
+            setDistanciaCercana(Math.round(minimaDistancia));
+        }
     }, []);
 
+    // ── Actualizar marcador en el mapa ─────────────────────────────────────
+    const actualizarMarcador = useCallback((idEstacion, nivel) => {
+        const marker = markersRef.current[idEstacion];
+        if (!marker) return;
+
+        const estilo = nivelToEstilo(nivel);
+        marker.setIcon({
+            path: window.google?.maps?.SymbolPath?.CIRCLE,
+            scale: 8,
+            fillColor: estilo.color,
+            fillOpacity: 0.9,
+            strokeColor: '#ffffff',
+            strokeWeight: 2
+        });
+    }, []);
+
+    // ── Actualizar una estación en el estado ───────────────────────────────
+    const actualizarEstacionEnEstado = useCallback((update) => {
+        setEstaciones(prev =>
+            prev.map(est =>
+                est.id_estacion === update.id_estacion
+                    ? { ...est, nivel_congestion: update.nivel_nuevo, ultima_actualizacion: update.timestamp }
+                    : est
+            )
+        );
+        actualizarMarcador(update.id_estacion, update.nivel_nuevo);
+        setUpdateTime(new Date());
+
+        // Actualizar panel de detalle si esa estación está seleccionada
+        setSelectedStation(prev =>
+            prev && prev.id_estacion === update.id_estacion
+                ? { ...prev, nivel_congestion: update.nivel_nuevo }
+                : prev
+        );
+    }, [actualizarMarcador]);
+
+    // ── Cargar datos iniciales y suscribir SSE ──────────────────────────────
     useEffect(() => {
-        if (!estaciones) return;
+        let mounted = true;
 
-        // Cargar Leaflet.js de forma dinámica
-        const loadLeaflet = () => {
-            if (!document.getElementById('leaflet-css')) {
-                const link = document.createElement('link');
-                link.id = 'leaflet-css';
-                link.rel = 'stylesheet';
-                link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-                document.head.appendChild(link);
-            }
+        const inicializar = async () => {
+            try {
+                setCargando(true);
+                setError(null);
 
-            if (!window.L) {
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-                script.async = true;
-                script.onload = initMap;
-                document.body.appendChild(script);
-            } else {
-                initMap();
+                // Cargar estaciones desde la BD
+                const data = await getEstaciones();
+                if (!mounted) return;
+                
+                // Filtramos solo las estaciones que están definidas en COORDS_ESTACIONES (Línea A y B)
+                const estacionesFiltradas = data.filter(est => normalizarNombre(est.nombre_estacion) in COORDS_ESTACIONES);
+                setEstaciones(estacionesFiltradas);
+                setCargando(false);
+
+                // Suscribir SSE para actualizaciones en tiempo real
+                const sse = suscribirSSE(
+                    // Snapshot inicial desde el servidor (estado completo)
+                    (snapshotEstaciones) => {
+                        if (!mounted) return;
+                        const filtradasSnapshot = snapshotEstaciones.filter(est => normalizarNombre(est.nombre_estacion) in COORDS_ESTACIONES);
+                        setEstaciones(filtradasSnapshot);
+                        setSseConectado(true);
+                        // Re-renderizar marcadores si el mapa ya está listo
+                        filtradasSnapshot.forEach(est => {
+                            actualizarMarcador(est.id_estacion, est.nivel_congestion);
+                        });
+                    },
+                    // Actualización individual cuando cambia una estación
+                    (update) => {
+                        if (!mounted) return;
+                        actualizarEstacionEnEstado(update);
+                        setSseConectado(true);
+                    },
+                    // Error de conexión SSE
+                    () => {
+                        if (!mounted) return;
+                        setSseConectado(false);
+                    }
+                );
+                sseRef.current = sse;
+
+            } catch (err) {
+                if (!mounted) return;
+                console.error('[Trafico] Error al cargar estaciones:', err);
+                setError('No se pudo conectar con el servidor. Mostrando datos de caché.');
+                setCargando(false);
+                // Fallback: datos básicos estáticos
+                setEstaciones(Object.entries(COORDS_ESTACIONES).slice(0, 26).map(([nombre, coords], i) => ({
+                    id_estacion: i + 1,
+                    nombre_estacion: `Estación ${nombre}`,
+                    nivel_congestion: 'BAJO',
+                    ultima_actualizacion: new Date().toISOString()
+                })));
             }
         };
 
+        inicializar();
+
+        // ── Pedir ubicación al montar ─────────────────────────────────────────
+        if (esPasajero && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    setUbicacion({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                },
+                (err) => console.warn('[Geolocalización] No permitida o error:', err.message),
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+        }
+
+        return () => {
+            mounted = false;
+            if (sseRef.current) {
+                sseRef.current.close();
+                sseRef.current = null;
+            }
+        };
+    }, [actualizarEstacionEnEstado, actualizarMarcador, esPasajero]);
+
+    // Calcular la estación más cercana cuando ya tenemos las estaciones y la ubicación
+    useEffect(() => {
+        if (ubicacion && estaciones.length > 0) {
+            encontrarEstacionCercana(ubicacion.lat, ubicacion.lng, estaciones);
+        }
+    }, [ubicacion, estaciones, encontrarEstacionCercana]);
+
+    // ── Inicializar mapa de Google Maps ─────────────────────────────────────
+    useEffect(() => {
+        if (cargando || estaciones.length === 0) return;
+
         const initMap = () => {
-            if (mapRef.current && !mapInstance.current && window.L) {
-                const L = window.L;
+            if (!mapRef.current || mapInstance.current || !window.google) return;
 
-                // Crear instancia del mapa centrada en Medellín
-                const map = L.map(mapRef.current).setView([6.2476, -75.5658], 13);
-                mapInstance.current = map;
+            mapInstance.current = new window.google.maps.Map(mapRef.current, {
+                center: { lat: 6.2476, lng: -75.5658 },
+                zoom: 13,
+                styles: [
+                    { featureType: 'all', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+                    { featureType: 'all', elementType: 'labels.text.fill', stylers: [{ color: '#ffffff' }] },
+                    { featureType: 'all', elementType: 'labels.text.stroke', stylers: [{ color: '#000000' }, { lightness: 13 }] },
+                    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f3443' }] },
+                    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+                    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3a3a3a' }] },
+                ],
+                mapTypeControl: true,
+                streetViewControl: false,
+                fullscreenControl: true
+            });
 
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                    subdomains: 'abcd',
-                    maxZoom: 20
-                }).addTo(map);
+            // Construir mapa de nombre→estación para combinar con coordenadas
+            const estacionMap = {};
+            estaciones.forEach(est => {
+                const nombre = normalizarNombre(est.nombre_estacion);
+                estacionMap[nombre] = est;
+            });
 
-                // Dibujar Línea A (Verde)
-                const lineaAPath = estaciones.lineaA.map(est => [est.lat, est.lng]);
-                L.polyline(lineaAPath, {
-                    color: '#2ecc71',
-                    weight: 5,
-                    opacity: 0.8
-                }).addTo(map);
+            // Trazado dinámico de líneas basado en la estructura secuencial 'estacionesMetro'
 
-                // Dibujar Línea B (Azul)
-                const lineaBPath = estaciones.lineaB.map(est => [est.lat, est.lng]);
-                L.polyline(lineaBPath, {
-                    color: '#3498db',
-                    weight: 5,
-                    opacity: 0.8
-                }).addTo(map);
+            // Trazar Línea A
+            const lineaAPath = estacionesMetro['A'].map(est => ({ lat: est.lat, lng: est.lng }));
+            new window.google.maps.Polyline({
+                path: lineaAPath,
+                geodesic: true,
+                strokeColor: '#2ecc71',
+                strokeOpacity: 0.8,
+                strokeWeight: 5,
+                map: mapInstance.current
+            });
 
-                // Dibujar rutas de Metrocable (Punteadas)
-                estaciones.metrocable.forEach((estacion, index) => {
-                    if (index < estaciones.metrocable.length - 1 && 
-                        estaciones.metrocable[index + 1].tipo === estacion.tipo) {
-                        L.polyline([
-                            [estacion.lat, estacion.lng],
-                            [estaciones.metrocable[index + 1].lat, estaciones.metrocable[index + 1].lng]
-                        ], {
-                            color: '#9b59b6',
-                            weight: 3,
-                            dashArray: '6, 8',
-                            opacity: 0.8
-                        }).addTo(map);
+            // Trazar Línea B
+            const lineaBPath = estacionesMetro['B'].map(est => ({ lat: est.lat, lng: est.lng }));
+            new window.google.maps.Polyline({
+                path: lineaBPath,
+                geodesic: true,
+                strokeColor: '#3498db',
+                strokeOpacity: 0.8,
+                strokeWeight: 5,
+                map: mapInstance.current
+            });
+
+            // Agregar marcadores con nivel real de la BD
+            const agregarMarcador = (nombre, coords, estacionData) => {
+                if (!estacionData) return;
+
+                const estilo = nivelToEstilo(estacionData.nivel_congestion);
+
+                const marker = new window.google.maps.Marker({
+                    position: { lat: coords.lat, lng: coords.lng },
+                    map: mapInstance.current,
+                    title: nombre,
+                    icon: {
+                        path: window.google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: estilo.color,
+                        fillOpacity: 0.9,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2
                     }
                 });
 
-                // Función para añadir marcadores
-                const addMarkers = (estacionesArray, lineaName) => {
-                    estacionesArray.forEach(est => {
-                        const color = est.estado === 'alto' ? '#e74c3c' : 
-                                      est.estado === 'medio' ? '#f39c12' : '#2ecc71';
-                        
-                        const marker = L.circleMarker([est.lat, est.lng], {
-                            radius: 8,
-                            fillColor: color,
-                            color: '#ffffff',
-                            weight: 2,
-                            opacity: 1,
-                            fillOpacity: 0.9
-                        }).addTo(map);
+                // Guardar referencia para actualizaciones en tiempo real
+                markersRef.current[estacionData.id_estacion] = marker;
 
-                        marker.bindPopup(`
-                            <div style="color: #000; font-family: Arial, sans-serif; min-width: 150px; padding: 5px;">
-                                <h4 style="margin: 0 0 6px 0; color: ${color}; font-size: 1.1em; font-weight: bold;">${est.nombre}</h4>
-                                <p style="margin: 4px 0; font-size: 0.9em;"><strong>Línea:</strong> ${lineaName}</p>
-                                <p style="margin: 4px 0; font-size: 0.9em;">
-                                    <strong>Estado:</strong> 
-                                    <span style="color: ${color}; font-weight: bold;">
-                                        ${est.estado === 'alto' ? '🔴 Alta congestión' : 
-                                          est.estado === 'medio' ? '🟡 Moderado' : '🟢 Fluido'}
-                                    </span>
-                                </p>
+                const infoWindow = new window.google.maps.InfoWindow({
+                    content: `
+                        <div style="font-family: 'Inter', sans-serif; padding: 12px 4px 4px 4px; min-width: 220px; border-radius: 8px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${coords.linea === 'A' ? '#2ecc71' : '#3498db'}; margin-right: 8px;"></div>
+                                <h3 style="margin: 0; font-size: 16px; color: #2c3e50; font-weight: 600;">${nombre}</h3>
                             </div>
-                        `);
+                            <div style="background-color: ${estilo.color}15; padding: 10px; border-radius: 6px; display: flex; flex-direction: column; gap: 4px; border-left: 4px solid ${estilo.color};">
+                                <span style="font-size: 12px; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Nivel de Congestión</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 18px;">${estilo.emoji}</span>
+                                    <span style="color: ${estilo.color}; font-weight: 700; font-size: 15px;">${estilo.texto}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `
+                });
 
-                        marker.on('click', () => {
-                            setSelectedStation(est);
-                        });
-                    });
-                };
+                marker.addListener('click', () => {
+                    infoWindow.open(mapInstance.current, marker);
+                    setSelectedStation(estacionData);
+                    // Pre-seleccionar en panel de reporte
+                    setReporteEstacion(String(estacionData.id_estacion));
+                });
+            };
 
-                addMarkers(estaciones.lineaA, 'Línea A');
-                addMarkers(estaciones.lineaB, 'Línea B');
-                addMarkers(estaciones.metrocable, 'Metrocable');
-            }
+            // Agregar todos los marcadores que tengan coordenadas y datos de BD
+            Object.entries(COORDS_ESTACIONES).forEach(([nombre, coords]) => {
+                const estacionData = estacionMap[nombre];
+                if (estacionData) {
+                    agregarMarcador(nombre, coords, estacionData);
+                }
+            });
         };
 
-        loadLeaflet();
-
-        return () => {
-            if (mapInstance.current) {
-                mapInstance.current.remove();
-                mapInstance.current = null;
+        if (window.google && window.google.maps) {
+            initMap();
+        } else {
+            const existingScript = document.getElementById('google-maps-script');
+            if (!existingScript) {
+                const script = document.createElement('script');
+                script.id = 'google-maps-script';
+                // Removemos ?key=YOUR_API_KEY_HERE& para evitar que Google rechace la petición duramente
+                script.src = `https://maps.googleapis.com/maps/api/js?libraries=visualization`;
+                script.async = true;
+                script.defer = true;
+                script.onload = initMap;
+                document.head.appendChild(script);
+            } else {
+                existingScript.onload = initMap;
             }
-        };
-    }, [estaciones]);
+        }
+    }, [cargando, estaciones]);
 
+    // ── Estado global calculado ────────────────────────────────────────────
     const getEstadoGlobal = () => {
-        if (!estaciones) return { nivel: 'bajo', texto: 'Cargando...', color: '#999' };
-        const todasEstaciones = [...estaciones.lineaA, ...estaciones.lineaB, ...estaciones.metrocable];
-        const countAlto = todasEstaciones.filter(e => e.estado === 'alto').length;
-        const countMedio = todasEstaciones.filter(e => e.estado === 'medio').length;
-
-        if (countAlto > 3) return { nivel: 'alto', texto: 'Alta congestión global', color: '#e74c3c' };
-        if (countMedio > 5 || countAlto > 0) return { nivel: 'medio', texto: 'Retrasos moderados', color: '#f39c12' };
-        return { nivel: 'bajo', texto: 'Flujo normal y ágil', color: '#2ecc71' };
+        if (estaciones.length === 0) return { nivel: 'bajo', texto: 'Cargando...', color: '#95a5a6' };
+        const altoCount = estaciones.filter(e => e.nivel_congestion === 'ALTO').length;
+        const medioCount = estaciones.filter(e => e.nivel_congestion === 'MEDIO').length;
+        if (altoCount > 5) return { nivel: 'alto', texto: 'Alta congestión', color: '#e74c3c' };
+        if (medioCount > 8 || altoCount > 2) return { nivel: 'medio', texto: 'Congestión moderada', color: '#f39c12' };
+        return { nivel: 'bajo', texto: 'Flujo normal', color: '#2ecc71' };
     };
 
     const estadoGlobal = getEstadoGlobal();
 
-    // Actualizar reporte de congestión en tiempo real (RF-21)
-    const handleReport = async (estado) => {
-        if (!selectedStation) return;
+    // ── Enviar reporte de congestión ───────────────────────────────────────
+    const handleEnviarReporte = async () => {
+        if (!reporteEstacion) {
+            setMensajeReporte({ tipo: 'error', texto: 'Selecciona una estación.' });
+            return;
+        }
+
+        setEnviandoReporte(true);
+        setMensajeReporte(null);
+
         try {
-            const res = await reportarCongestion(selectedStation.nombre, estado);
-            if (res.success) {
-                alert(`¡Gracias! Has reportado congestión de nivel "${estado}" en la estación ${selectedStation.nombre}.`);
-                fetchCongestionData(); // Recargar datos
-            }
+            const resultado = await enviarReporte(parseInt(reporteEstacion), reporteNivel);
+            setMensajeReporte({
+                tipo: 'success',
+                texto: resultado.message
+            });
+            // Auto-limpiar mensaje en 5 segundos
+            setTimeout(() => setMensajeReporte(null), 5000);
         } catch (err) {
-            console.error(err);
-            alert('Error al reportar congestión');
+            setMensajeReporte({ tipo: 'error', texto: err.message });
+        } finally {
+            setEnviandoReporte(false);
         }
     };
 
-    // Cambiar configuración de suscripción (RF-25)
-    const handleToggleSubscriptions = async (correoVal, pushVal) => {
-        try {
-            await updateSuscripcion(correoVal, pushVal);
-            setRecibirCorreo(correoVal);
-            setRecibirPush(pushVal);
-        } catch (err) {
-            console.error('Error al actualizar suscripciones:', err);
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="wrapped-loading" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', color: '#00ff88', flexDirection: 'column', gap: '1rem' }}>
-                <i className="fas fa-circle-notch fa-spin" style={{ fontSize: '3rem' }}></i>
-                <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Cargando mapa en tiempo real...</p>
-            </div>
-        );
-    }
-
+    // ── Render ─────────────────────────────────────────────────────────────
     return (
         <div className="trafico-section">
-            {/* Header con información */}
+            {/* Header */}
             <div className="trafico-header">
                 <button className="btn-back-dashboard" onClick={() => onBack('congestion')}>
                     <i className="fas fa-arrow-left"></i>
                     <span>Volver</span>
                 </button>
-                
+
                 <div className="trafico-title-section">
                     <h1 className="trafico-main-title">
                         <i className="fas fa-subway"></i>
                         Monitoreo en Tiempo Real
                     </h1>
-                    <p className="trafico-subtitle">Metro de Medellín</p>
+                    <p className="trafico-subtitle">
+                        Metro de Medellín
+                        {sseConectado && (
+                            <span className="sse-badge" title="Actualizaciones en tiempo real activas">
+                                <span className="sse-dot"></span> En vivo
+                            </span>
+                        )}
+                    </p>
                 </div>
 
                 <div className="trafico-status-badge" style={{ borderColor: estadoGlobal.color }}>
@@ -276,196 +493,267 @@ const Trafico = ({ onBack }) => {
                 <div className="control-card">
                     <i className="fas fa-map-marker-alt"></i>
                     <div className="control-info">
-                        <span className="control-label">Estaciones totales</span>
-                        <span className="control-value">
-                            {estaciones.lineaA.length + estaciones.lineaB.length + estaciones.metrocable.length}
+                        <span className="control-label">Estaciones monitoreadas</span>
+                        <span className="control-value">{estaciones.length}</span>
+                    </div>
+                </div>
+
+                <div className="control-card">
+                    <i className="fas fa-signal"></i>
+                    <div className="control-info">
+                        <span className="control-label">Canal en tiempo real</span>
+                        <span className="control-value" style={{ color: sseConectado ? '#2ecc71' : '#e74c3c' }}>
+                            {sseConectado ? '● Conectado' : '○ Conectando...'}
                         </span>
                     </div>
                 </div>
 
-                <button className="btn-refresh" onClick={() => { setLoading(true); fetchCongestionData(); }}>
+                {/* Botón reporte (solo pasajeros) */}
+                {esPasajero && (
+                    <button className="btn-refresh" style={{ background: 'rgba(231,76,60,0.15)', borderColor: '#e74c3c', color: '#e74c3c' }}
+                        onClick={() => setPanelReporte(p => !p)}>
+                        <i className="fas fa-exclamation-triangle"></i>
+                        {panelReporte ? 'Cerrar reporte' : 'Reportar congestión'}
+                    </button>
+                )}
+
+                <button className="btn-refresh" onClick={async () => {
+                    const data = await getEstaciones().catch(() => null);
+                    if (data) { setEstaciones(data); setUpdateTime(new Date()); }
+                }}>
                     <i className="fas fa-sync-alt"></i>
                     Actualizar
                 </button>
             </div>
 
+            {/* Panel de Reporte de Congestión (solo rol Pasajero) */}
+            {esPasajero && panelReporte && (
+                <div className="reporte-panel">
+                    <h3 className="reporte-title">
+                        <i className="fas fa-exclamation-circle"></i>
+                        Reportar nivel de congestión
+                    </h3>
+                    <p className="reporte-desc">
+                        Tu reporte contribuye al estado colaborativo del mapa.
+                        Se requieren al menos <strong>3 reportes coincidentes</strong> en los últimos 5 minutos para actualizar el nivel.
+                    </p>
+
+                    <div className="reporte-form">
+                        <div className="reporte-field">
+                            <label>
+                                Estación
+                                {ubicacion && distanciaCercana !== null && (
+                                    <span style={{ color: '#3498db', fontSize: '0.8em', marginLeft: '8px', textTransform: 'none' }}>
+                                        <i className="fas fa-location-arrow"></i> A {distanciaCercana}m de ti
+                                    </span>
+                                )}
+                            </label>
+                            <select
+                                value={reporteEstacion}
+                                onChange={e => setReporteEstacion(e.target.value)}
+                                className="reporte-select"
+                            >
+                                <option value="">— Selecciona una estación —</option>
+                                {estaciones.map(est => {
+                                    const dist = distancias[est.id_estacion];
+                                    const distText = dist !== undefined ? ` (A ${dist > 1000 ? (dist/1000).toFixed(1) + 'km' : dist + 'm'})` : '';
+                                    return (
+                                        <option key={est.id_estacion} value={est.id_estacion}>
+                                            {est.nombre_estacion}{distText}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+
+                        <div className="reporte-field">
+                            <label>Nivel de congestión</label>
+                            <div className="nivel-buttons">
+                                {[
+                                    { val: 'BAJO', label: '🟢 Flujo normal', color: '#2ecc71' },
+                                    { val: 'MEDIO', label: '🟡 Moderado', color: '#f39c12' },
+                                    { val: 'ALTO', label: '🔴 Alta congestión', color: '#e74c3c' },
+                                ].map(opcion => (
+                                    <button
+                                        key={opcion.val}
+                                        className={`nivel-btn ${reporteNivel === opcion.val ? 'active' : ''}`}
+                                        style={reporteNivel === opcion.val
+                                            ? { borderColor: opcion.color, background: `${opcion.color}22`, color: opcion.color }
+                                            : {}}
+                                        onClick={() => setReporteNivel(opcion.val)}
+                                    >
+                                        {opcion.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <button
+                            className="btn-enviar-reporte"
+                            onClick={handleEnviarReporte}
+                            disabled={enviandoReporte || !reporteEstacion}
+                        >
+                            {enviandoReporte
+                                ? <><i className="fas fa-spinner fa-spin"></i> Enviando...</>
+                                : <><i className="fas fa-paper-plane"></i> Enviar reporte</>
+                            }
+                        </button>
+                    </div>
+
+                    {mensajeReporte && (
+                        <div className={`reporte-mensaje ${mensajeReporte.tipo}`}>
+                            <i className={`fas fa-${mensajeReporte.tipo === 'success' ? 'check-circle' : 'exclamation-circle'}`}></i>
+                            {mensajeReporte.texto}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Banner de error si no hay conexión con BD */}
+            {error && (
+                <div className="error-banner">
+                    <i className="fas fa-wifi-slash"></i>
+                    {error}
+                </div>
+            )}
+
+            {/* Skeleton mientras carga */}
+            {cargando && (
+                <div className="loading-overlay">
+                    <i className="fas fa-subway fa-spin" style={{ fontSize: '2rem', color: '#2ecc71' }}></i>
+                    <p>Cargando datos del sistema...</p>
+                </div>
+            )}
+
             {/* Contenedor del mapa */}
             <div className="map-container-full">
                 <div id="map-full" ref={mapRef}></div>
 
-                {/* Panel lateral con leyenda, resumen y reportes */}
-                <div className="trafico-sidebar" style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                    
-                    {/* Sección 1: Leyenda */}
+                {/* Panel lateral */}
+                <div className="trafico-sidebar">
+                    {/* Leyenda */}
                     <div className="sidebar-section">
                         <h3 className="sidebar-title">
                             <i className="fas fa-info-circle"></i>
-                            Leyenda de Congestión
+                            Leyenda
                         </h3>
                         <div className="trafico-legend">
-                            <div className="legend-item">
-                                <div className="legend-color" style={{ background: '#2ecc71' }}></div>
-                                <div className="legend-text">
-                                    <span className="legend-label" style={{ color: '#2ecc71' }}>Flujo Normal (Verde)</span>
-                                </div>
-                            </div>
-                            <div className="legend-item">
-                                <div className="legend-color" style={{ background: '#f39c12' }}></div>
-                                <div className="legend-text">
-                                    <span className="legend-label" style={{ color: '#f39c12' }}>Moderado (Amarillo)</span>
-                                </div>
-                            </div>
-                            <div className="legend-item">
-                                <div className="legend-color" style={{ background: '#e74c3c' }}></div>
-                                <div className="legend-text">
-                                    <span className="legend-label" style={{ color: '#e74c3c' }}>Alta Congestión (Rojo)</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Sección 2: Suscripción a notificaciones (RF-24, RF-25) */}
-                    <div className="sidebar-section subscription-card" style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <h3 className="sidebar-title">
-                            <i className="fas fa-bell"></i>
-                            Alertas y Suscripciones
-                        </h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={recibirCorreo}
-                                    onChange={(e) => handleToggleSubscriptions(e.target.checked, recibirPush)}
-                                />
-                                <span>Recibir alertas por correo</span>
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={recibirPush}
-                                    onChange={(e) => handleToggleSubscriptions(recibirCorreo, e.target.checked)}
-                                />
-                                <span>Notificaciones emergentes</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* Sección 3: Estación seleccionada & Reportar en tiempo real (RF-21) */}
-                    {selectedStation ? (
-                        <div className="sidebar-section station-detail" style={{ background: 'rgba(0, 255, 136, 0.05)', border: '1px solid rgba(0, 255, 136, 0.2)' }}>
-                            <h3 className="sidebar-title">
-                                <i className="fas fa-location-dot"></i>
-                                Detalles de Estación
-                            </h3>
-                            <div className="station-detail-card">
-                                <h4 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>{selectedStation.nombre}</h4>
-                                <div className="station-status" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <span className="status-dot" style={{
-                                        display: 'inline-block',
-                                        width: '12px',
-                                        height: '12px',
-                                        borderRadius: '50%',
-                                        background: selectedStation.estado === 'alto' ? '#e74c3c' :
-                                                   selectedStation.estado === 'medio' ? '#f39c12' : '#2ecc71'
-                                    }}></span>
-                                    <span style={{ fontWeight: 'bold' }}>
-                                        {selectedStation.estado === 'alto' ? '🔴 Alta congestión' :
-                                         selectedStation.estado === 'medio' ? '🟡 Congestión moderada' : '🟢 Flujo normal'}
-                                    </span>
-                                </div>
-
-                                <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#64748b', display: 'block', marginBottom: '0.5rem' }}>¿Ves algo diferente? ¡Reporta como pasajero!</span>
-                                    <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                        <button
-                                            onClick={() => handleReport('bajo')}
-                                            style={{ flex: 1, padding: '0.4rem 0.2rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: '#2ecc71', color: '#000', fontWeight: 'bold', fontSize: '0.8rem' }}
-                                        >
-                                            Normal
-                                        </button>
-                                        <button
-                                            onClick={() => handleReport('medio')}
-                                            style={{ flex: 1, padding: '0.4rem 0.2rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: '#f39c12', color: '#000', fontWeight: 'bold', fontSize: '0.8rem' }}
-                                        >
-                                            Medio
-                                        </button>
-                                        <button
-                                            onClick={() => handleReport('alto')}
-                                            style={{ flex: 1, padding: '0.4rem 0.2rem', border: 'none', borderRadius: '4px', cursor: 'pointer', background: '#e74c3c', color: '#fff', fontWeight: 'bold', fontSize: '0.8rem' }}
-                                        >
-                                            Alto
-                                        </button>
+                            {[
+                                { color: '#2ecc71', label: 'Flujo Normal', desc: 'Sin retrasos', nivel: 'BAJO' },
+                                { color: '#f39c12', label: 'Moderado', desc: 'Algunos retrasos', nivel: 'MEDIO' },
+                                { color: '#e74c3c', label: 'Alta Congestión', desc: 'Retrasos significativos', nivel: 'ALTO' },
+                            ].map(item => (
+                                <div className="legend-item" key={item.nivel}>
+                                    <div className="legend-color" style={{ background: item.color }}></div>
+                                    <div className="legend-text">
+                                        <span className="legend-label">{item.label}</span>
+                                        <span className="legend-desc">{item.desc}</span>
+                                        <span className="legend-count" style={{ color: item.color }}>
+                                            {estaciones.filter(e => e.nivel_congestion === item.nivel).length} est.
+                                        </span>
                                     </div>
                                 </div>
-                            </div>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="sidebar-section" style={{ textAlign: 'center', padding: '1rem', color: '#64748b', fontSize: '0.9rem' }}>
-                            <p>Haz clic en cualquier estación en el mapa para reportar tráfico o ver detalles.</p>
-                        </div>
-                    )}
+                    </div>
 
-                    {/* Sección 4: Resumen de congestión por líneas (RF-22) */}
+                    {/* Líneas */}
                     <div className="sidebar-section">
                         <h3 className="sidebar-title">
                             <i className="fas fa-route"></i>
-                            Resumen de Líneas
+                            Líneas
                         </h3>
-                        <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1rem' }}>
-                            <button
-                                onClick={() => setActiveSummaryLine('lineaA')}
-                                style={{ flex: 1, background: activeSummaryLine === 'lineaA' ? 'rgba(0,255,136,0.1)' : 'transparent', border: `1px solid ${activeSummaryLine === 'lineaA' ? '#00ff88' : 'rgba(255,255,255,0.05)'}`, color: '#fff', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
-                            >
-                                Línea A
-                            </button>
-                            <button
-                                onClick={() => setActiveSummaryLine('lineaB')}
-                                style={{ flex: 1, background: activeSummaryLine === 'lineaB' ? 'rgba(52,152,219,0.1)' : 'transparent', border: `1px solid ${activeSummaryLine === 'lineaB' ? '#3498db' : 'rgba(255,255,255,0.05)'}`, color: '#fff', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
-                            >
-                                Línea B
-                            </button>
-                            <button
-                                onClick={() => setActiveSummaryLine('metrocable')}
-                                style={{ flex: 1, background: activeSummaryLine === 'metrocable' ? 'rgba(155,89,182,0.1)' : 'transparent', border: `1px solid ${activeSummaryLine === 'metrocable' ? '#9b59b6' : 'rgba(255,255,255,0.05)'}`, color: '#fff', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
-                            >
-                                Cable
-                            </button>
-                        </div>
-
-                        <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            {estaciones[activeSummaryLine].map(est => {
-                                const statusColor = est.estado === 'alto' ? '#e74c3c' :
-                                                    est.estado === 'medio' ? '#f39c12' : '#2ecc71';
-                                return (
-                                    <div
-                                        key={est.nombre}
-                                        onClick={() => setSelectedStation(est)}
-                                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
-                                    >
-                                        <span>{est.nombre}</span>
-                                        <span style={{ color: statusColor, fontWeight: 'bold' }}>
-                                            {est.estado === 'alto' ? 'Alto' : est.estado === 'medio' ? 'Medio' : 'Normal'}
-                                        </span>
+                        <div className="lineas-info">
+                            {[
+                                { nombre: 'Línea A', color: '#2ecc71', filtro: e => normalizarNombre(e.nombre_estacion) in COORDS_ESTACIONES && COORDS_ESTACIONES[normalizarNombre(e.nombre_estacion)]?.linea === 'A' },
+                                { nombre: 'Línea B', color: '#3498db', filtro: e => COORDS_ESTACIONES[normalizarNombre(e.nombre_estacion)]?.linea === 'B' },
+                            ].map(linea => (
+                                <div className="linea-badge" key={linea.nombre} style={{ borderLeft: `4px solid ${linea.color}` }}>
+                                    <div className="linea-name">{linea.nombre}</div>
+                                    <div className="linea-stations">
+                                        {estaciones.filter(linea.filtro).length} estaciones
                                     </div>
-                                );
-                            })}
+                                </div>
+                            ))}
                         </div>
+                    </div>
+
+                    {/* Detalle de estación seleccionada */}
+                    {selectedStation && (() => {
+                        const estilo = nivelToEstilo(selectedStation.nivel_congestion);
+                        return (
+                            <div className="sidebar-section station-detail">
+                                <h3 className="sidebar-title">
+                                    <i className="fas fa-location-dot"></i>
+                                    Estación Seleccionada
+                                </h3>
+                                <div className="station-detail-card">
+                                    <h4>{normalizarNombre(selectedStation.nombre_estacion)}</h4>
+                                    <div className="station-status">
+                                        <span className="status-dot" style={{ background: estilo.color }}></span>
+                                        <span>{estilo.emoji} {estilo.texto}</span>
+                                    </div>
+                                    <p className="station-update">
+                                        Actualizado: {new Date(selectedStation.ultima_actualizacion).toLocaleTimeString()}
+                                    </p>
+                                    {esPasajero && (
+                                        <button
+                                            className="btn-reporte-quick"
+                                            onClick={() => {
+                                                setReporteEstacion(String(selectedStation.id_estacion));
+                                                setPanelReporte(true);
+                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                            }}
+                                        >
+                                            <i className="fas fa-flag"></i> Reportar esta estación
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Alertas activas */}
+                    <div className="sidebar-section alerts-section">
+                        <h3 className="sidebar-title">
+                            <i className="fas fa-exclamation-triangle"></i>
+                            Estaciones en Alerta
+                        </h3>
+                        {estaciones
+                            .filter(e => e.nivel_congestion === 'ALTO')
+                            .slice(0, 4)
+                            .map(est => (
+                                <div key={est.id_estacion} className="alert-item danger">
+                                    <i className="fas fa-circle-exclamation"></i>
+                                    <div className="alert-content">
+                                        <div className="alert-title">{normalizarNombre(est.nombre_estacion)}</div>
+                                        <div className="alert-desc">🔴 Alta congestión reportada</div>
+                                    </div>
+                                </div>
+                            ))
+                        }
+                        {estaciones.filter(e => e.nivel_congestion === 'ALTO').length === 0 && (
+                            <div className="alert-item info">
+                                <i className="fas fa-check-circle"></i>
+                                <div className="alert-content">
+                                    <div className="alert-title">Sin alertas activas</div>
+                                    <div className="alert-desc">Todas las estaciones operan con normalidad</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
 
-            {/* Estadísticas inferiores */}
+            {/* Estadísticas */}
             <div className="trafico-stats">
                 <div className="stat-box">
                     <div className="stat-icon" style={{ background: 'rgba(46, 204, 113, 0.2)' }}>
                         <i className="fas fa-check-circle" style={{ color: '#2ecc71' }}></i>
                     </div>
                     <div className="stat-content">
-                        <div className="stat-value">
-                            {estaciones.lineaA.filter(e => e.estado === 'bajo').length + 
-                             estaciones.lineaB.filter(e => e.estado === 'bajo').length}
-                        </div>
-                        <div className="stat-label">Estaciones con flujo normal</div>
+                        <div className="stat-value">{estaciones.filter(e => e.nivel_congestion === 'BAJO').length}</div>
+                        <div className="stat-label">Estaciones flujo normal</div>
                     </div>
                 </div>
 
@@ -474,10 +762,7 @@ const Trafico = ({ onBack }) => {
                         <i className="fas fa-exclamation-circle" style={{ color: '#f39c12' }}></i>
                     </div>
                     <div className="stat-content">
-                        <div className="stat-value">
-                            {estaciones.lineaA.filter(e => e.estado === 'medio').length + 
-                             estaciones.lineaB.filter(e => e.estado === 'medio').length}
-                        </div>
+                        <div className="stat-value">{estaciones.filter(e => e.nivel_congestion === 'MEDIO').length}</div>
                         <div className="stat-label">Con congestión moderada</div>
                     </div>
                 </div>
@@ -487,21 +772,18 @@ const Trafico = ({ onBack }) => {
                         <i className="fas fa-times-circle" style={{ color: '#e74c3c' }}></i>
                     </div>
                     <div className="stat-content">
-                        <div className="stat-value">
-                            {estaciones.lineaA.filter(e => e.estado === 'alto').length + 
-                             estaciones.lineaB.filter(e => e.estado === 'alto').length}
-                        </div>
+                        <div className="stat-value">{estaciones.filter(e => e.nivel_congestion === 'ALTO').length}</div>
                         <div className="stat-label">Con alta congestión</div>
                     </div>
                 </div>
 
                 <div className="stat-box">
                     <div className="stat-icon" style={{ background: 'rgba(52, 152, 219, 0.2)' }}>
-                        <i className="fas fa-clock" style={{ color: '#3498db' }}></i>
+                        <i className="fas fa-users" style={{ color: '#3498db' }}></i>
                     </div>
                     <div className="stat-content">
-                        <div className="stat-value">~5 min</div>
-                        <div className="stat-label">Tiempo promedio de espera</div>
+                        <div className="stat-value">{estaciones.length}</div>
+                        <div className="stat-label">Estaciones monitoreadas</div>
                     </div>
                 </div>
             </div>

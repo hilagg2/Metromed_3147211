@@ -1,7 +1,8 @@
 const { pool } = require('../config/database');
 const { sendCongestionNotification } = require('../utils/emailService');
+const { broadcast, addClient, removeClient } = require('../services/sseService');
 
-// Estaciones base con coordenadas
+// Estaciones base con coordenadas para simulación original
 const estacionesBase = {
     lineaA: [
         { nombre: "Niquía", lat: 6.3389, lng: -75.5431 },
@@ -117,12 +118,12 @@ const reportarCongestion = async (req, res) => {
                     );
                 }
 
-                // Enviar por email si tiene habilitado (RF-24)
+                // Enviar correo electrónico si tiene correo habilitado (RF-24)
                 if (receivesEmail) {
                     try {
-                        await sendCongestionNotification(user.correo, nombre_estacion, 'Alta', user.nombre);
-                    } catch (emailErr) {
-                        console.error(`Error enviando correo a ${user.correo}:`, emailErr);
+                        await sendCongestionNotification(user.correo, user.nombre, nombre_estacion);
+                    } catch (mailError) {
+                        console.error(`Error enviando correo a ${user.correo}:`, mailError.message);
                     }
                 }
             }
@@ -130,15 +131,15 @@ const reportarCongestion = async (req, res) => {
 
         res.json({
             success: true,
-            message: `Reporte de congestión (${estado}) registrado correctamente para la estación ${nombre_estacion}.`
+            message: 'Reporte registrado y enviado a la comunidad correctamente'
         });
     } catch (error) {
-        console.error('Error al reportar congestión:', error);
-        res.status(500).json({ success: false, message: 'Error interno al registrar reporte' });
+        console.error('Error al registrar reporte de congestión:', error);
+        res.status(500).json({ success: false, message: 'Error al registrar reporte' });
     }
 };
 
-// Obtener historial de notificaciones recibidas (RF-26)
+// Obtener notificaciones del usuario (RF-23, RF-26)
 const getNotificaciones = async (req, res) => {
     const id_usuario = req.user.id;
     try {
@@ -153,22 +154,22 @@ const getNotificaciones = async (req, res) => {
     }
 };
 
-// Marcar notificaciones como leídas (RF-23, RF-26)
+// Marcar todas las notificaciones del usuario como leídas
 const marcarLeidas = async (req, res) => {
     const id_usuario = req.user.id;
     try {
         await pool.query(
-            'UPDATE historial_notificaciones SET leida = TRUE WHERE id_usuario = $1',
+            'UPDATE historial_notificaciones SET leida = TRUE WHERE id_usuario = $1 AND leida = FALSE',
             [id_usuario]
         );
         res.json({ success: true, message: 'Notificaciones marcadas como leídas' });
     } catch (error) {
         console.error('Error al marcar notificaciones:', error);
-        res.status(500).json({ success: false, message: 'Error al marcar notificaciones' });
+        res.status(500).json({ success: false, message: 'Error al actualizar notificaciones' });
     }
 };
 
-// Obtener suscripción a notificaciones (RF-25)
+// Obtener preferencias de suscripción (RF-25)
 const getSuscripcion = async (req, res) => {
     const id_usuario = req.user.id;
     try {
@@ -178,7 +179,6 @@ const getSuscripcion = async (req, res) => {
         );
 
         if (rows.length === 0) {
-            // Por defecto, suscrito a ambos
             return res.json({
                 success: true,
                 recibir_correo: true,
@@ -188,8 +188,8 @@ const getSuscripcion = async (req, res) => {
 
         res.json({
             success: true,
-            recibir_correo: rows[0].recibir_correo,
-            recibir_push: rows[0].recibir_push
+            recibir_correo: !!rows[0].recibir_correo,
+            recibir_push: !!rows[0].recibir_push
         });
     } catch (error) {
         console.error('Error al obtener suscripción:', error);
@@ -221,11 +221,250 @@ const updateSuscripcion = async (req, res) => {
     }
 };
 
+// ─── Funcionalidades de Monitoreo en Tiempo Real (valeria) ────────────────────
+
+// Configuración de umbrales
+const VENTANA_MINUTOS = parseInt(process.env.CONGESTION_VENTANA_MIN, 10) || 5;
+const UMBRAL_MINIMO = parseInt(process.env.CONGESTION_UMBRAL, 10) || 3;
+const COOLDOWN_MINUTOS = parseInt(process.env.CONGESTION_COOLDOWN_MIN, 10) || 5;
+
+const NIVEL_LABEL = {
+    BAJO:  'Verde — Flujo normal',
+    MEDIO: 'Amarillo — Congestión moderada',
+    ALTO:  'Rojo — Alta congestión'
+};
+
+const ensureTable = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS reportes_congestion (
+            id_reporte      SERIAL PRIMARY KEY,
+            id_usuario      INT NOT NULL,
+            id_estacion     INT NOT NULL,
+            nivel_reportado VARCHAR(10) NOT NULL
+                                CHECK (nivel_reportado IN ('BAJO','MEDIO','ALTO')),
+            fecha_reporte   TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const getEstaciones = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT
+                id_estacion,
+                nombre_estacion,
+                nivel_congestion,
+                ultima_actualizacion
+            FROM estaciones
+            ORDER BY id_estacion ASC
+        `);
+
+        return res.json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            estaciones: rows
+        });
+    } catch (error) {
+        console.error('[Congestión] Error en getEstaciones:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener estaciones'
+        });
+    }
+};
+
+const suscribirSSE = async (req, res) => {
+    res.set({
+        'Content-Type':  'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection':    'keep-alive',
+        'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders();
+
+    addClient(res);
+
+    try {
+        const [rows] = await pool.query(`
+            SELECT id_estacion, nombre_estacion, nivel_congestion, ultima_actualizacion
+            FROM estaciones ORDER BY id_estacion ASC
+        `);
+        const snapshot = `event: snapshot\ndata: ${JSON.stringify({
+            timestamp: new Date().toISOString(),
+            estaciones: rows
+        })}\n\n`;
+        res.write(snapshot);
+    } catch (err) {
+        console.warn('[SSE] No se pudo enviar snapshot inicial:', err.message);
+    }
+
+    req.on('close', () => {
+        removeClient(res);
+    });
+};
+
+const recibirReporte = async (req, res) => {
+    const { id_estacion, nivel_reportado } = req.body;
+    const id_usuario = req.user.id;
+
+    if (!id_estacion || !nivel_reportado) {
+        return res.status(400).json({
+            success: false,
+            message: 'Se requieren id_estacion y nivel_reportado'
+        });
+    }
+
+    const nivelesValidos = ['BAJO', 'MEDIO', 'ALTO'];
+    const nivelNorm = String(nivel_reportado).toUpperCase();
+    if (!nivelesValidos.includes(nivelNorm)) {
+        return res.status(400).json({
+            success: false,
+            message: `nivel_reportado debe ser uno de: ${nivelesValidos.join(', ')}`
+        });
+    }
+
+    try {
+        await ensureTable();
+
+        const [cooldownCheck] = await pool.query(`
+            SELECT id_reporte, fecha_reporte
+            FROM reportes_congestion
+            WHERE id_usuario   = $1
+              AND id_estacion  = $2
+              AND fecha_reporte >= NOW() - INTERVAL '${COOLDOWN_MINUTOS} minutes'
+            ORDER BY fecha_reporte DESC
+            LIMIT 1
+        `, [id_usuario, id_estacion]);
+
+        if (cooldownCheck.length > 0) {
+            const ultimoReporte = new Date(cooldownCheck[0].fecha_reporte);
+            const minutosRestantes = COOLDOWN_MINUTOS - Math.floor(
+                (Date.now() - ultimoReporte.getTime()) / 60000
+            );
+            return res.status(429).json({
+                success: false,
+                message: `Ya reportaste esta estación recientemente. Espera ${minutosRestantes} minuto(s) más.`
+            });
+        }
+
+        const [estacionRows] = await pool.query(
+            'SELECT id_estacion, nombre_estacion, nivel_congestion FROM estaciones WHERE id_estacion = $1',
+            [id_estacion]
+        );
+        if (estacionRows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `Estación ${id_estacion} no encontrada`
+            });
+        }
+        const estacion = estacionRows[0];
+
+        await pool.query(`
+            INSERT INTO reportes_congestion (id_usuario, id_estacion, nivel_reportado, fecha_reporte)
+            VALUES ($1, $2, $3, NOW())
+        `, [id_usuario, id_estacion, nivelNorm]);
+
+        console.log(`[Congestión] Reporte recibido: Usuario=${id_usuario}, Estación=${id_estacion}, Nivel=${nivelNorm}`);
+
+        const nuevoNivel = await calcularNivelCongestion(id_estacion);
+
+        let actualizado = false;
+
+        if (nuevoNivel && nuevoNivel !== estacion.nivel_congestion) {
+            await pool.query(`
+                UPDATE estaciones
+                SET nivel_congestion = $1, ultima_actualizacion = NOW()
+                WHERE id_estacion = $2
+            `, [nuevoNivel, id_estacion]);
+
+            actualizado = true;
+
+            broadcast('congestion_update', {
+                timestamp:      new Date().toISOString(),
+                id_estacion:    parseInt(id_estacion),
+                nombre_estacion: estacion.nombre_estacion,
+                nivel_anterior: estacion.nivel_congestion,
+                nivel_nuevo:    nuevoNivel,
+                label:          NIVEL_LABEL[nuevoNivel]
+            });
+
+            console.log(`[Congestión] Nivel actualizado: ${estacion.nombre_estacion} → ${nuevoNivel}`);
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: actualizado
+                ? `Reporte procesado. Nivel actualizado a ${NIVEL_LABEL[nuevoNivel]}`
+                : 'Reporte registrado. Aún no hay consenso suficiente para cambiar el nivel.',
+            id_estacion: parseInt(id_estacion),
+            nivel_reportado: nivelNorm,
+            nivel_actual: nuevoNivel || estacion.nivel_congestion,
+            actualizado
+        });
+
+    } catch (error) {
+        console.error('[Congestión] Error en recibirReporte:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al procesar el reporte',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+const calcularNivelCongestion = async (id_estacion) => {
+    const [rows] = await pool.query(`
+        SELECT
+            nivel_reportado,
+            COUNT(*) AS total
+        FROM reportes_congestion
+        WHERE id_estacion   = $1
+          AND fecha_reporte >= NOW() - INTERVAL '${VENTANA_MINUTOS} minutes'
+        GROUP BY nivel_reportado
+        ORDER BY total DESC, nivel_reportado DESC
+    `, [id_estacion]);
+
+    if (rows.length === 0) return null;
+
+    const votos = { BAJO: 0, MEDIO: 0, ALTO: 0 };
+    rows.forEach(r => {
+        votos[r.nivel_reportado] = parseInt(r.total, 10);
+    });
+
+    const totalVotos = votos.BAJO + votos.MEDIO + votos.ALTO;
+
+    console.log(`[Validación Colectiva] Estación ${id_estacion} | Ventana: ${VENTANA_MINUTOS}min | Votos:`, votos);
+
+    const prioridad = ['ALTO', 'MEDIO', 'BAJO'];
+
+    let nivelGanador = null;
+    let maxVotos = 0;
+
+    prioridad.forEach(nivel => {
+        if (votos[nivel] > maxVotos) {
+            maxVotos = votos[nivel];
+            nivelGanador = nivel;
+        }
+    });
+
+    if (maxVotos < UMBRAL_MINIMO) {
+        console.log(`[Validación Colectiva] Umbral no alcanzado (${maxVotos}/${UMBRAL_MINIMO}). Sin cambio.`);
+        return null;
+    }
+
+    console.log(`[Validación Colectiva] Consenso alcanzado: ${nivelGanador} con ${maxVotos} votos de ${totalVotos} totales.`);
+    return nivelGanador;
+};
+
 module.exports = {
     getCongestion,
     reportarCongestion,
     getNotificaciones,
     marcarLeidas,
     getSuscripcion,
-    updateSuscripcion
+    updateSuscripcion,
+    getEstaciones,
+    suscribirSSE,
+    recibirReporte,
+    calcularNivelCongestion
 };
