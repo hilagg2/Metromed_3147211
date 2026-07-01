@@ -126,11 +126,45 @@ const chatConIA = async (req, res) => {
         });
     } catch (error) {
         console.error('[Apoyo] Error en chat:', error.message);
-        return res.status(500).json({
-            success: false,
-            esEmergencia: false,
-            respuesta: '💚 Disculpa, estoy teniendo dificultades técnicas en este momento. Si necesitas hablar con alguien, por favor comunícate con la Línea 106 (gratuita, 24 horas) o al 123 para emergencias. Tu bienestar es lo más importante.',
-            message: 'Error al procesar el mensaje',
+        
+        let respuestaFallback = '';
+        let esEmergenciaFallback = false;
+        
+        const lower = mensaje.toLowerCase();
+        if (detectarRiesgo(mensaje)) {
+            esEmergenciaFallback = true;
+            respuestaFallback = '💚 Entiendo que estás pasando por un momento muy difícil. Por favor, comunícate con la Línea 106 o al 123 para recibir ayuda de inmediato. Tu bienestar es lo más importante.';
+        } else if (lower.includes('hola') || lower.includes('buen') || lower.includes('saludo') || lower.includes('como estas')) {
+            respuestaFallback = '¡Hola! Estoy aquí para escucharte y apoyarte en este espacio seguro. ¿Cómo te encuentras el día de hoy?';
+        } else if (lower.includes('respir') || lower.includes('ejercicio') || lower.includes('calmar') || lower.includes('relaj') || lower.includes('ansiedad')) {
+            respuestaFallback = 'Hagamos una respiración consciente (Técnica 4-7-8):\n\n1. 🌬️ Inhala aire por la nariz suavemente durante 4 segundos.\n2. ⏱️ Mantén el aire en tus pulmones por 7 segundos.\n3. 🍃 Exhala lentamente por la boca durante 8 segundos.\n\nRepite esto 3 veces. ¿Cómo te sientes ahora?';
+        } else if (lower.includes('cercan') || lower.includes('donde ir') || lower.includes('lugar') || lower.includes('hospital') || lower.includes('clinica') || lower.includes('ubicac')) {
+            respuestaFallback = 'Puedes buscar los centros de salud mental más cercanos a tu ubicación actual presionando el botón "Ayuda cercana" o indicándome tu ubicación.';
+        } else if (lower.includes('triste') || lower.includes('mal') || lower.includes('solo') || lower.includes('sola') || lower.includes('depre')) {
+            respuestaFallback = 'Lamento mucho escuchar eso. Por favor, ten en cuenta que tu vida es valiosa y hay personas que quieren apoyarte. Si estás experimentando una crisis, podemos guiarte para calmarte con un ejercicio de respiración o proporcionarte los centros de ayuda cercanos.';
+        } else {
+            respuestaFallback = 'Entiendo. Estoy aquí para escucharte y apoyarte en lo que necesites. Si deseas relajarte, podemos hacer un ejercicio de respiración, o puedes consultar los centros de salud mental cercanos.';
+        }
+
+        let lineas = [];
+        try {
+            const [rows] = await pool.query(
+                'SELECT nombre, numero, descripcion, tipo, horario FROM lineas_emergencia WHERE activa = true ORDER BY id_linea'
+            );
+            lineas = rows || [];
+        } catch (dbErr) {
+            lineas = [
+                { nombre: 'Línea 106', numero: '106', descripcion: 'Atención psicológica gratuita 24/7', tipo: 'escucha' },
+                { nombre: 'Línea 123', numero: '123', descripcion: 'Emergencias', tipo: 'emergencia' },
+                { nombre: 'Línea de la Vida', numero: '018000113113', descripcion: 'Prevención del suicidio', tipo: 'escucha' },
+            ];
+        }
+
+        return res.json({
+            success: true,
+            esEmergencia: esEmergenciaFallback,
+            respuesta: respuestaFallback,
+            lineas
         });
     }
 };
