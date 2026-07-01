@@ -12,8 +12,8 @@ const {
 
 // ── Middleware de Admin ────────────────────────────────────────────────────────
 const esAdmin = (req, res, next) => {
-    // id_rol === 2 equivale a Administrador (RN-46.1)
-    if (req.user.rol !== 2 && req.user.rol !== '2') {
+    // id_rol === 1 equivale a Administrador (RN-46.1)
+    if (req.user.rol !== 1 && req.user.rol !== '1') {
         return res.status(403).json({ success: false, message: 'Acceso restringido a Administradores.' });
     }
     next();

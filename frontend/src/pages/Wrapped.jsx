@@ -12,6 +12,7 @@ const Wrapped = () => {
     const [wrappedData, setWrappedData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [periodo, setPeriodo] = useState('anual');
 
     // Obtener ID de usuario logueado
     const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -19,8 +20,9 @@ const Wrapped = () => {
 
     useEffect(() => {
         const fetchWrappedData = async () => {
+            setLoading(true);
             try {
-                const response = await fetch(`http://localhost:5000/api/usuarios/${userId}/wrapped`);
+                const response = await fetch(`http://localhost:5000/api/usuarios/${userId}/wrapped?periodo=${periodo}`);
                 if (!response.ok) {
                     throw new Error('Error al obtener los datos del Wrapped');
                 }
@@ -35,7 +37,7 @@ const Wrapped = () => {
         };
 
         fetchWrappedData();
-    }, [userId]);
+    }, [userId, periodo]);
 
     // Inicializar gráficos y contadores cuando se carguen los datos
     useEffect(() => {
@@ -310,9 +312,20 @@ const Wrapped = () => {
                 {/* HERO */}
                 <div className="wrapped-hero mb-4">
                     <div>
-                        <div className="small-muted">Wrapped de {wrappedData?.nombre} — Metro de Medellín</div>
+                        <div className="d-flex align-items-center gap-2 mb-1">
+                            <span className="small-muted">Wrapped de {wrappedData?.nombre} — Metro de Medellín</span>
+                            <select 
+                                value={periodo} 
+                                onChange={(e) => setPeriodo(e.target.value)}
+                                className="form-select form-select-sm period-select"
+                                style={{ width: 'auto', background: '#112233', color: '#fff', border: '1px solid #00ff88', fontSize: '0.8rem', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                                <option value="anual">Resumen Anual</option>
+                                <option value="mensual">Resumen Mensual</option>
+                            </select>
+                        </div>
                         <div className="big-num" id="totalSessions">0</div>
-                        <div className="small-muted">Sesiones este mes</div>
+                        <div className="small-muted">{periodo === 'mensual' ? 'Sesiones este mes' : 'Sesiones este año'}</div>
                     </div>
 
                     <div className="hero-right">
@@ -361,7 +374,7 @@ const Wrapped = () => {
                             <div className="col-6">
                                 <div className="kpi">
                                     <div className="h5" id="entriesCount">0</div>
-                                    <div className="small-muted">Entradas simuladas</div>
+                                    <div className="small-muted">Reportes hechos</div>
                                 </div>
                             </div>
                             <div className="col-6">
