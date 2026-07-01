@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { testConnection } = require('./config/database');
+const { testConnection, pool } = require('./config/database');
+const fs = require('fs');
+const path = require('path');
 
 // Cargar variables de entorno
 dotenv.config();
@@ -20,8 +22,11 @@ app.use(express.urlencoded({ extended: true }));
 // Rutas
 const authRoutes = require('./routes/authRoutes');
 const usuarioRoutes = require('./routes/usuarioRoutes');
+const congestionRoutes = require('./routes/congestionRoutes');
+
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/congestion', congestionRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -58,6 +63,34 @@ const startServer = async () => {
         // Intentar probar conexión a la base de datos, pero no terminar si falla
         try {
             await testConnection();
+
+            // ── Migración automática: crear tabla reportes_congestion si no existe ──
+            try {
+                const migrationPath = path.join(__dirname, 'database', 'congestion_migration.sql');
+                const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+                // Ejecutar solo el CREATE TABLE IF NOT EXISTS (seguro, idempotente)
+                await pool.query(`
+                    CREATE TABLE IF NOT EXISTS reportes_congestion (
+                        id_reporte      SERIAL PRIMARY KEY,
+                        id_usuario      INT NOT NULL,
+                        id_estacion     INT NOT NULL,
+                        nivel_reportado VARCHAR(10) NOT NULL
+                                            CHECK (nivel_reportado IN ('BAJO','MEDIO','ALTO')),
+                        fecha_reporte   TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                `);
+                await pool.query(`
+                    CREATE INDEX IF NOT EXISTS idx_rc_estacion_fecha
+                    ON reportes_congestion (id_estacion, fecha_reporte DESC)
+                `);
+                await pool.query(`
+                    CREATE INDEX IF NOT EXISTS idx_rc_usuario_estacion
+                    ON reportes_congestion (id_usuario, id_estacion, fecha_reporte DESC)
+                `);
+                console.log('✅ Tabla reportes_congestion verificada/creada correctamente');
+            } catch (migError) {
+                console.warn('⚠️ Advertencia en migración de congestión:', migError.message);
+            }
         } catch (dbError) {
             console.warn('⚠️ No se pudo conectar a la base de datos. El servidor iniciará de todos modos.');
             console.warn('⚠️ Detalle:', dbError && dbError.message ? dbError.message : dbError);
@@ -67,6 +100,7 @@ const startServer = async () => {
         app.listen(PORT, () => {
             console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
             console.log(`📊 Modo: ${process.env.NODE_ENV || 'development'}`);
+            console.log(`📡 Módulo de congestión activo en /api/congestion`);
         });
     } catch (error) {
         console.error('❌ Error al iniciar el servidor:', error);
