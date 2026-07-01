@@ -3,7 +3,7 @@ const { pool } = require('./database');
 const initDatabase = async () => {
     try {
         console.log('Initializing database tables for games and psychological support...');
-        
+
         // 1. Crear tabla configuracion_juegos si no existe
         await pool.query(`
             CREATE TABLE IF NOT EXISTS configuracion_juegos (
@@ -14,7 +14,7 @@ const initDatabase = async () => {
             )
         `);
 
-        // 2. Insertar juegos por defecto si no existen
+        // 2. Insertar juegos por defecto si no existen.
         await pool.query(`
             INSERT INTO configuracion_juegos (id_juego, nombre, habilitado, metrocoins_premio) VALUES
             ('cartas', 'Cartas en Pareja', TRUE, 10),
