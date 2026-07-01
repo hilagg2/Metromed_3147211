@@ -165,3 +165,55 @@
         padding: 1rem;
     }
 }
+
+/* ── Botones del Módulo de Apoyo ── */
+.apoyo-btn {
+    background: var(--primary-green, #00ff88);
+    color: #0c1524 !important;
+    padding: 0.8rem 1.5rem;
+    border-radius: 30px;
+    font-weight: 700;
+    font-size: 1rem;
+    text-decoration: none;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.apoyo-btn:hover {
+    background: #00d9ff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 217, 255, 0.4);
+}
+
+.apoyo-btn:disabled {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.3) !important;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.emergency-banner-btn {
+    background: #ef4444;
+    color: #fff;
+    padding: 0.8rem 1.5rem;
+    border-radius: 30px;
+    text-decoration: none;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.emergency-banner-btn:hover {
+    background: #d32f2f;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(239, 68, 68, 0.4);
+}

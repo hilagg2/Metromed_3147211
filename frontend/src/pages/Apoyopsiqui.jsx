@@ -90,7 +90,7 @@ const Apoyopsiqui = () => {
                     <div className="apoyo-header">
                         <h2><i className="fas fa-heartbeat"></i> Tu Salud Mental Importa</h2>
                         <p>En el Metro de Medellín nos preocupamos por ti. Accede al chat de ayuda para conversar o consulta recursos profesionales.</p>
-                        <button className="apoyo-btn" style={{ marginTop: '1rem', background: 'var(--primary-green)', color: '#000', fontWeight: 'bold' }} onClick={() => setShowChatbot(true)}>
+                        <button className="apoyo-btn" style={{ marginTop: '1rem' }} onClick={() => setShowChatbot(true)}>
                             <i className="fas fa-comments"></i> Iniciar Chat de Escucha Activa
                         </button>
                     </div>
@@ -212,7 +212,6 @@ const Apoyopsiqui = () => {
                             <button
                                 type="submit"
                                 className="apoyo-btn"
-                                style={{ background: 'transparent', cursor: 'pointer' }}
                                 disabled={submitting || !reportText.trim()}
                             >
                                 {submitting ? 'Enviando...' : 'Enviar Comentario'}
@@ -226,7 +225,7 @@ const Apoyopsiqui = () => {
                             <h3>¿Necesitas ayuda de inmediato?</h3>
                             <p>Si te encuentras en una crisis severa o riesgo vital, llama al canal nacional de rescate.</p>
                         </div>
-                        <a href="tel:123" className="emergency-banner-btn" style={{ background: '#ef4444', color: '#fff', padding: '0.8rem 1.5rem', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}><i className="fas fa-ambulance"></i> Llamar al 123</a>
+                        <a href="tel:123" className="emergency-banner-btn"><i className="fas fa-ambulance"></i> Llamar al 123</a>
                     </div>
                 </>
             ) : (
@@ -235,7 +234,6 @@ const Apoyopsiqui = () => {
                     <button 
                         className="apoyo-btn" 
                         onClick={() => setShowChatbot(false)} 
-                        style={{ marginBottom: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer' }}
                     >
                         <i className="fas fa-arrow-left"></i> Volver a Recursos de Apoyo
                     </button>
