@@ -2,16 +2,20 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
 const {
-    getLineasAyuda,
+    chatConIA,
+    obtenerLineas,
+    obtenerCentrosCercanos,
     getFaqs,
     createReporte
 } = require('../controllers/apoyoController');
 
-// Proteger todas las rutas de apoyo psicológico con token JWT
-router.use(verifyToken);
-
-router.get('/lineas', getLineasAyuda);
+// ── Rutas públicas (Apoyo accesible para todos sin login) ──
+router.post('/chat', chatConIA);
+router.get('/lineas', obtenerLineas);
+router.get('/centros', obtenerCentrosCercanos);
 router.get('/faqs', getFaqs);
-router.post('/reporte', createReporte);
+
+// ── Rutas protegidas (Requieren usuario autenticado) ──
+router.post('/reporte', verifyToken, createReporte);
 
 module.exports = router;

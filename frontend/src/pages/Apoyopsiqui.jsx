@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './Apoyopsiqui.css';
-import MetroMedellinChatbot from './chatbot.jsx';
+import { MetroMedellinChatbot } from './chatbot.jsx';
 import { getLineasAyuda, getFaqs, createReporte } from '../services/apoyoService';
 
 const fallbackLineas = [
@@ -33,7 +33,15 @@ const Apoyopsiqui = () => {
             try {
                 const fetchedLineas = await getLineasAyuda();
                 if (fetchedLineas && fetchedLineas.length > 0) {
-                    setLineas(fetchedLineas);
+                    // Mapear campos si vienen del nuevo formato de base de datos
+                    const mapped = fetchedLineas.map(l => ({
+                        id_linea: l.id_linea,
+                        nombre_servicio: l.nombre || l.nombre_servicio,
+                        telefono: l.numero || l.telefono,
+                        horario: l.horario,
+                        disponibilidad: l.activa || l.disponibilidad ? 'Disponible' : 'No disponible'
+                    }));
+                    setLineas(mapped);
                 }
                 
                 const fetchedFaqs = await getFaqs();
@@ -42,7 +50,6 @@ const Apoyopsiqui = () => {
                 }
             } catch (error) {
                 console.error('Error al cargar datos de apoyo psicológico:', error);
-                // Mantiene los fallbacks si hay error
             }
         };
         loadSupportData();
@@ -219,7 +226,7 @@ const Apoyopsiqui = () => {
                             <h3>¿Necesitas ayuda de inmediato?</h3>
                             <p>Si te encuentras en una crisis severa o riesgo vital, llama al canal nacional de rescate.</p>
                         </div>
-                        <a href="tel:123" className="emergency-btn"><i className="fas fa-ambulance"></i> Llamar al 123</a>
+                        <a href="tel:123" className="emergency-banner-btn" style={{ background: '#ef4444', color: '#fff', padding: '0.8rem 1.5rem', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}><i className="fas fa-ambulance"></i> Llamar al 123</a>
                     </div>
                 </>
             ) : (

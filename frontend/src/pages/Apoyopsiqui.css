@@ -4,139 +4,164 @@
     color: var(--text-light);
     height: 100%;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .apoyo-header {
     text-align: center;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
 }
 
 .apoyo-header h2 {
-    color: var(--primary-green);
+    color: var(--primary-green, #00ff88);
     font-size: 2.5rem;
     margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.apoyo-header h2 i {
+    color: #e74c3c;
 }
 
 .apoyo-header p {
     font-size: 1.1rem;
     color: rgba(255, 255, 255, 0.8);
-    max-width: 600px;
+    max-width: 700px;
     margin: 0 auto;
 }
 
-.apoyo-grid {
+/* ── Main Layout: Chatbot + Sidebar ── */
+.apoyo-main-content {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: 1fr 350px;
     gap: 2rem;
-    margin-bottom: 3rem;
+    flex: 1;
+    min-height: 0; /* Important for scrollable inner areas */
 }
 
+.apoyo-chatbot-section {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.apoyo-sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* ── Info Cards ── */
 .apoyo-card {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(0, 255, 136, 0.2);
     border-radius: 15px;
-    padding: 2rem;
+    padding: 1.5rem;
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
+    align-items: flex-start;
 }
 
 .apoyo-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 10px 20px rgba(0, 255, 136, 0.15);
-    border-color: var(--primary-green);
+    border-color: var(--primary-green, #00ff88);
     background: rgba(255, 255, 255, 0.08);
 }
 
 .apoyo-icon {
-    font-size: 3rem;
-    color: var(--primary-green);
-    margin-bottom: 1.5rem;
+    font-size: 2rem;
+    color: var(--primary-green, #00ff88);
+    margin-bottom: 1rem;
 }
 
 .apoyo-card h3 {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    margin-bottom: 0.8rem;
     color: white;
 }
 
 .apoyo-card p {
     color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 1.5rem;
-    line-height: 1.6;
+    line-height: 1.5;
+    font-size: 0.9rem;
+    margin: 0;
 }
 
-.apoyo-btn {
-    background: transparent;
-    border: 1px solid var(--primary-green);
-    color: var(--primary-green);
-    padding: 0.8rem 1.5rem;
-    border-radius: 25px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.apoyo-btn:hover {
-    background: var(--primary-green);
-    color: var(--dark-bg);
-}
-
+/* ── Emergency Banner ── */
 .emergency-banner {
-    background: linear-gradient(45deg, #ff4d4d, #c0392b);
+    background: linear-gradient(135deg, rgba(231, 76, 60, 0.1) 0%, rgba(192, 57, 43, 0.2) 100%);
+    border: 1px solid rgba(231, 76, 60, 0.4);
     border-radius: 15px;
-    padding: 2rem;
+    padding: 1.5rem;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    margin-top: 2rem;
-    box-shadow: 0 10px 30px rgba(255, 77, 77, 0.3);
-}
-
-.emergency-content {
-    flex: 1;
+    text-align: center;
+    gap: 1rem;
+    margin-top: auto;
+    box-shadow: 0 8px 24px rgba(231, 76, 60, 0.15);
 }
 
 .emergency-content h3 {
-    font-size: 1.8rem;
+    font-size: 1.3rem;
     margin-bottom: 0.5rem;
-    color: white;
+    color: #e74c3c;
 }
 
 .emergency-content p {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
 }
 
 .emergency-btn {
-    background: white;
-    color: #c0392b;
-    padding: 1rem 2rem;
+    background: #e74c3c;
+    color: white;
+    padding: 0.8rem 1.5rem;
     border-radius: 30px;
     font-weight: 700;
     text-decoration: none;
     display: flex;
     align-items: center;
-    gap: 10px;
-    transition: transform 0.3s ease;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    transition: all 0.3s ease;
 }
 
 .emergency-btn:hover {
-    transform: scale(1.05);
+    background: #c0392b;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(231, 76, 60, 0.4);
+}
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+    .apoyo-main-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .apoyo-sidebar-section {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .apoyo-sidebar-section > * {
+        flex: 1 1 300px;
+    }
 }
 
 @media (max-width: 768px) {
-    .emergency-banner {
-        flex-direction: column;
-        text-align: center;
-        gap: 1.5rem;
-    }
-
     .apoyo-header h2 {
-        font-size: 2rem;
+        font-size: 1.8rem;
+    }
+    
+    .apoyo-container {
+        padding: 1rem;
     }
 }

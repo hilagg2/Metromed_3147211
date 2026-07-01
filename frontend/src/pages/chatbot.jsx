@@ -1,164 +1,489 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+    enviarMensajeChat,
+    detectarRiesgoLocal,
+    getLineasEmergencia,
+    getCentrosCercanos,
+    LINEAS_FALLBACK,
+} from '../services/apoyoService';
 import './chatbot.css';
 
-// Lista de estaciones con coordenadas para geolocalización simulada
-const estacionesMedellin = [
-    { nombre: "Niquía", lat: 6.3389, lng: -75.5431 },
-    { nombre: "Bello", lat: 6.3378, lng: -75.5613 },
-    { nombre: "Madera", lat: 6.3209, lng: -75.5639 },
-    { nombre: "Acevedo", lat: 6.3005, lng: -75.5683 },
-    { nombre: "Tricentenario", lat: 6.2803, lng: -75.5728 },
-    { nombre: "Caribe", lat: 6.2725, lng: -75.5750 },
-    { nombre: "Universidad", lat: 6.2678, lng: -75.5683 },
-    { nombre: "Hospital", lat: 6.2621, lng: -75.5656 },
-    { nombre: "Prado", lat: 6.2518, lng: -75.5667 },
-    { nombre: "Parque Berrío", lat: 6.2515, lng: -75.5697 },
-    { nombre: "San Antonio", lat: 6.2473, lng: -75.5696 },
-    { nombre: "Alpujarra", lat: 6.2482, lng: -75.5746 },
-    { nombre: "Exposiciones", lat: 6.2438, lng: -75.5800 },
-    { nombre: "Industriales", lat: 6.2368, lng: -75.5890 },
-    { nombre: "Poblado", lat: 6.2107, lng: -75.5722 },
-    { nombre: "Aguacatala", lat: 6.1974, lng: -75.5768 },
-    { nombre: "Ayurá", lat: 6.1807, lng: -75.5849 },
-    { nombre: "Envigado", lat: 6.1692, lng: -75.5923 },
-    { nombre: "Itagüí", lat: 6.1616, lng: -75.6086 },
-    { nombre: "Sabaneta", lat: 6.1519, lng: -75.6161 },
-    { nombre: "La Estrella", lat: 6.1362, lng: -75.6450 },
-    { nombre: "Cisneros", lat: 6.2513, lng: -75.5625 },
-    { nombre: "San José", lat: 6.2589, lng: -75.5583 },
-    { nombre: "Miraflores", lat: 6.2640, lng: -75.5540 },
-    { nombre: "Floresta", lat: 6.2679, lng: -75.5510 }
+// ── Opciones rápidas para el usuario ─────────────────────────
+const OPCIONES_RAPIDAS = [
+    { id: 'sentir', icon: '💭', label: '¿Cómo me siento?' },
+    { id: 'ansiedad', icon: '😰', label: 'Tengo ansiedad' },
+    { id: 'tristeza', icon: '😢', label: 'Me siento triste' },
+    { id: 'estres', icon: '😫', label: 'Estoy estresado/a' },
+    { id: 'ayuda', icon: '📍', label: 'Ayuda cercana' },
+    { id: 'lineas', icon: '📞', label: 'Líneas de emergencia' },
 ];
 
-// Centros de ayuda psicológica y hospitales con salud mental
-const centrosAyuda = [
-    { nombre: "Centro de Acompañamiento Psicosocial San Antonio", lat: 6.2473, lng: -75.5696, direccion: "Estación San Antonio, Acceso B", tel: "300-1234567" },
-    { nombre: "Clínica Mental del Prado (Especialistas)", lat: 6.2522, lng: -75.5658, direccion: "Calle 58 # 47-32, Prado", tel: "(604) 284-5555" },
-    { nombre: "Punto de Escucha y Apoyo Caribe", lat: 6.2720, lng: -75.5745, direccion: "Terminal del Norte, Local 12", tel: "311-9876543" },
-    { nombre: "Hospital Universitario San Vicente Fundación", lat: 6.2621, lng: -75.5656, direccion: "Calle 64 # 51D-154", tel: "(604) 444-1333" },
-    { nombre: "Unidad Hospitalaria de Niquía", lat: 6.3401, lng: -75.5420, direccion: "Diagonal 55 # 34-10, Bello", tel: "(604) 482-1111" },
-    { nombre: "E.S.E Hospital Mental de Antioquia (HOMO)", lat: 6.3325, lng: -75.5645, direccion: "Calle 38 # 55-22, Bello", tel: "(604) 444-8330" },
-    { nombre: "Centro de Salud Poblado", lat: 6.2095, lng: -75.5705, direccion: "Carrera 43F # 11-20, Poblado", tel: "(604) 312-5500" },
-    { nombre: "Unidad de Salud Mental Belén", lat: 6.2250, lng: -75.5920, direccion: "Carrera 76 # 30-10, Belén", tel: "(604) 341-2233" }
-];
-
-// Calcular distancia usando la fórmula Haversine
-const haversineDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Radio de la Tierra en km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distancia en km
+// ── Mapeo de opciones rápidas a mensajes ─────────────────────
+const MENSAJES_OPCIONES = {
+    sentir: 'No sé cómo describir lo que siento, pero necesito hablar con alguien.',
+    ansiedad: 'Estoy sintiendo mucha ansiedad y no sé cómo manejarla.',
+    tristeza: 'Me siento triste y un poco solo/a últimamente.',
+    estres: 'El estrés del día a día me está afectando mucho.',
 };
 
+/**
+ * Saludo contextual basado en la hora del día.
+ */
+const obtenerSaludo = () => {
+    const hora = new Date().getHours();
+    if (hora < 12) return '¡Buenos días! ☀️';
+    if (hora < 18) return '¡Buenas tardes! 🌤️';
+    return '¡Buenas noches! 🌙';
+};
+
+/**
+ * MetroMedellinChatbot — Asistente de Apoyo Psicológico con IA
+ *
+ * Guardrails de seguridad:
+ *  1. Detección de riesgo client-side (instantáneo, regex)
+ *  2. Detección de riesgo server-side (regex en backend)
+ *  3. System prompt de Gemini con instrucciones de emergencia
+ *
+ * Confidencialidad (RN-27.3):
+ *  - Historial solo en useState (se borra al cerrar/recargar)
+ *  - No se almacena PII
+ */
 export const MetroMedellinChatbot = () => {
     const [messages, setMessages] = useState([
-        { from: 'bot', text: '¡Hola! Soy el asistente de apoyo emocional de MetroMed. Estoy aquí para escucharte sin juzgarte. Cuéntame, ¿cómo te sientes hoy o sobre qué te gustaría hablar?' }
+        {
+            from: 'bot',
+            text: `${obtenerSaludo()} Soy tu asistente de bienestar emocional en MetroMed 💚\n\nEstoy aquí para escucharte y orientarte. Puedes contarme cómo te sientes o seleccionar una opción rápida.\n\n🔒 Esta conversación es completamente confidencial y no se almacena.`,
+            timestamp: new Date(),
+        },
     ]);
     const [input, setInput] = useState('');
-    const [awaitingStation, setAwaitingStation] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
+    const [showEmergency, setShowEmergency] = useState(false);
+    const [emergencyLines, setEmergencyLines] = useState([]);
+    const [nearbyCenters, setNearbyCenters] = useState([]);
+    const [loadingCenters, setLoadingCenters] = useState(false);
+    const [showQuickOptions, setShowQuickOptions] = useState(true);
 
-    const getBotResponse = (text) => {
-        const lower = text.toLowerCase();
+    const messagesEndRef = useRef(null);
+    const inputRef = useRef(null);
 
-        // Si estábamos esperando la estación para geolocalizar
-        if (awaitingStation) {
-            const station = estacionesMedellin.find(est => 
-                lower.includes(est.nombre.toLowerCase())
-            );
+    // ── Auto-scroll al último mensaje ──
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isTyping, showEmergency, nearbyCenters]);
 
-            if (station) {
-                setAwaitingStation(false);
-                // Buscar centros en radio 4 km
-                const cercanos = centrosAyuda.map(centro => {
-                    const dist = haversineDistance(station.lat, station.lng, centro.lat, centro.lng);
-                    return { ...centro, dist };
-                }).filter(centro => centro.dist <= 4.0)
-                  .sort((a, b) => a.dist - b.dist);
+    // ── Cargar líneas de emergencia al montar ──
+    useEffect(() => {
+        getLineasEmergencia()
+            .then(setEmergencyLines)
+            .catch(() => setEmergencyLines(LINEAS_FALLBACK));
+    }, []);
 
-                if (cercanos.length > 0) {
-                    let resp = `He encontrado los siguientes puntos de apoyo psicológico a menos de 4 km de la estación **${station.nombre}**:\n\n`;
-                    cercanos.forEach((c, idx) => {
-                        resp += `${idx + 1}. 🏥 **${c.nombre}**\n📍 *Dirección:* ${c.direccion}\n📏 *Distancia:* ${c.dist.toFixed(2)} km\n📞 *Teléfono:* ${c.tel}\n\n`;
-                    });
-                    resp += '¿Hay algo más en lo que te pueda colaborar hoy?';
-                    return resp;
-                } else {
-                    setAwaitingStation(false);
-                    return `No encontré centros de salud mental especializados a menos de 4 km de la estación **${station.nombre}**. Sin embargo, puedes comunicarte inmediatamente con la **Línea Amiga al 106** o llamar a emergencias al **123** para asistencia nacional inmediata.`;
-                }
-            } else {
-                return 'No logré identificar la estación. Por favor, escribe un nombre válido de estación del Metro de Medellín (ejemplo: "San Antonio", "Niquía", "Poblado", "Cisneros").';
-            }
-        }
-
-        if (lower.includes('hola') || lower.includes('buen') || lower.includes('saludo')) {
-            return '¡Hola! Estoy aquí para escucharte y apoyarte en este espacio seguro. ¿Cómo te encuentras el día de hoy?';
-        }
-
-        if (lower.includes('cercan') || lower.includes('donde ir') || lower.includes('lugar') || lower.includes('hospital') || lower.includes('clinica') || lower.includes('punto') || lower.includes('ubicac')) {
-            setAwaitingStation(true);
-            return 'Para recomendarte los centros de ayuda psicológica y hospitales más cercanos en un radio de 4 km, por favor indícame en qué estación del Metro de Medellín te encuentras actualmente (ej. San Antonio, Caribe, Prado, Niquía).';
-        }
-
-        if (lower.includes('triste') || lower.includes('mal') || lower.includes('ansia') || lower.includes('depre') || lower.includes('estres') || lower.includes('estrés') || lower.includes('llorar') || lower.includes('sola') || lower.includes('solo') || lower.includes('morir') || lower.includes('suici')) {
-            return 'Lamento mucho escuchar eso. Por favor, ten en cuenta que tu vida es valiosa y hay personas que quieren apoyarte. Si estás experimentando una crisis, podemos guiarte para calmarte con un ejercicio de respiración o proporcionarte los centros más cercanos escribiendo "centros cercanos".\n\nTambién puedes llamar a la Línea Amiga marcando el 106 de forma gratuita.';
-        }
-
-        if (lower.includes('respir') || lower.includes('ejercicio') || lower.includes('calmar') || lower.includes('relaj') || lower.includes('ansiedad')) {
-            return 'Hagamos una respiración consciente (Técnica 4-7-8):\n\n1. 🌬️ Inhala aire por la nariz suavemente durante 4 segundos.\n2. ⏱️ Mantén el aire en tus pulmones por 7 segundos.\n3. 🍃 Exhala lentamente por la boca durante 8 segundos.\n\nRepite esto 3 veces. ¿Cómo te sientes ahora?';
-        }
-
-        if (lower.includes('linea') || lower.includes('ayuda') || lower.includes('telefono') || lower.includes('número') || lower.includes('contacto') || lower.includes('psicol')) {
-            return 'Tienes los siguientes canales confidenciales activos 24/7:\n📞 **Línea Amiga:** Llama al 106\n🚨 **Emergencias Médicas:** Llama al 123\n🎗️ **Línea Antisuicidio:** Llama al 1313131';
-        }
-
-        if (lower.includes('gracias') || lower.includes('gracia')) {
-            return 'Con mucho gusto. Estoy aquí para acompañarte y brindarte un momento de tranquilidad. Cuídate mucho. ❤️';
-        }
-
-        return 'Te escucho con atención. Desahogarse es parte del proceso de sanar. Si deseas encontrar ayuda profesional cerca de ti, escribe "centros cercanos" o dime si deseas hacer un ejercicio de respiración.';
+    /**
+     * Construye el historial para enviar al backend.
+     * Solo envía los últimos 10 mensajes para no exceder tokens.
+     */
+    const buildHistorial = () => {
+        return messages
+            .slice(-10)
+            .map(m => ({ role: m.from === 'bot' ? 'bot' : 'user', text: m.text }));
     };
 
-    const handleSend = e => {
-        e.preventDefault();
-        if (!input.trim()) return;
-        const userMsg = { from: 'user', text: input.trim() };
-        setMessages(prev => [...prev, userMsg]);
-        
-        const replyText = getBotResponse(input.trim());
-        setTimeout(() => {
-            const botReply = { from: 'bot', text: replyText };
-            setMessages(prev => [...prev, botReply]);
-        }, 600);
+    /**
+     * Activa el protocolo de emergencia.
+     */
+    const activarEmergencia = (lineas = null) => {
+        setShowEmergency(true);
+        if (lineas && lineas.length > 0) {
+            setEmergencyLines(lineas);
+        }
+    };
 
+    /**
+     * Envía un mensaje al chatbot.
+     */
+    const handleSend = async (textoOverride = null) => {
+        const texto = textoOverride || input.trim();
+        if (!texto) return;
+
+        // Añadir mensaje del usuario
+        const userMsg = { from: 'user', text: texto, timestamp: new Date() };
+        setMessages(prev => [...prev, userMsg]);
         setInput('');
+        setShowQuickOptions(false);
+
+        // ── BARRERA 1: Detección de riesgo client-side (instantáneo) ──
+        if (detectarRiesgoLocal(texto)) {
+            const emergencyMsg = {
+                from: 'bot',
+                text: '💚 Entiendo que estás pasando por un momento muy difícil, y quiero que sepas que no estás solo/a. Lo que sientes importa y hay personas capacitadas que pueden ayudarte ahora mismo.',
+                timestamp: new Date(),
+                isEmergency: true,
+            };
+            setMessages(prev => [...prev, emergencyMsg]);
+            activarEmergencia();
+            return;
+        }
+
+        // ── Detección de intención: Buscar ayuda cercana ──
+        const intencionUbicacion = /\b(cerca(na)?|ubicaci(o|ó)n|d(o|ó)nde|centro(s)?|hospital(es)?|cl(i|í)nica(s)?)\b/i.test(texto) && /\b(hay|buscar|necesito|quiero|ayuda)\b/i.test(texto);
+        
+        if (intencionUbicacion) {
+            handleBuscarCercanos(true); // true = skip adding default user message
+            return;
+        }
+
+        // ── Llamar al backend (Gemini + barrera 2) ──
+        setIsTyping(true);
+        try {
+            const historial = buildHistorial();
+            const data = await enviarMensajeChat(texto, historial);
+
+            const botMsg = {
+                from: 'bot',
+                text: data.respuesta,
+                timestamp: new Date(),
+                isEmergency: data.esEmergencia,
+            };
+            setMessages(prev => [...prev, botMsg]);
+
+            if (data.esEmergencia) {
+                activarEmergencia(data.lineas);
+            }
+        } catch (error) {
+            console.error('[Chatbot] Error:', error);
+            const errorMsg = {
+                from: 'bot',
+                text: '💚 Disculpa, estoy teniendo dificultades en este momento. Si necesitas hablar con alguien urgente, por favor llama a la Línea 106 (gratuita, 24 horas) o al 123 para emergencias.',
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, errorMsg]);
+        } finally {
+            setIsTyping(false);
+        }
+    };
+
+    /**
+     * Maneja clic en opción rápida.
+     */
+    const handleQuickOption = async (opcionId) => {
+        if (opcionId === 'lineas') {
+            // Mostrar líneas de emergencia directamente
+            setShowQuickOptions(false);
+            const userMsg = { from: 'user', text: '📞 Quiero ver las líneas de emergencia', timestamp: new Date() };
+            setMessages(prev => [...prev, userMsg]);
+
+            const lineas = emergencyLines.length > 0 ? emergencyLines : LINEAS_FALLBACK;
+            const lineasTexto = lineas
+                .map(l => `📞 **${l.nombre}**: ${l.numero}\n   ${l.descripcion}`)
+                .join('\n\n');
+
+            const botMsg = {
+                from: 'bot',
+                text: `Aquí tienes las líneas de ayuda disponibles 💚\n\n${lineasTexto}\n\nTodas estas líneas son gratuitas y confidenciales. No dudes en llamar si lo necesitas.`,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, botMsg]);
+            return;
+        }
+
+        if (opcionId === 'ayuda') {
+            // Buscar centros cercanos (false = add default user message)
+            handleBuscarCercanos(false);
+            return;
+        }
+
+        // Enviar mensaje predefinido
+        const mensaje = MENSAJES_OPCIONES[opcionId];
+        if (mensaje) {
+            handleSend(mensaje);
+        }
+    };
+
+    /**
+     * Busca centros de ayuda cercanos usando geolocalización (RN-30).
+     */
+    const handleBuscarCercanos = (skipUserMsg = false) => {
+        setShowQuickOptions(false);
+        
+        if (!skipUserMsg) {
+            const userMsg = { from: 'user', text: '📍 Buscar ayuda cercana a mi ubicación', timestamp: new Date() };
+            setMessages(prev => [...prev, userMsg]);
+        }
+
+        if (!navigator.geolocation) {
+            const errMsg = {
+                from: 'bot',
+                text: '⚠️ Tu navegador no soporta geolocalización. Puedes buscar centros de ayuda en Medellín contactando a la Secretaría de Salud al (604) 385 5555.',
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, errMsg]);
+            return;
+        }
+
+        setLoadingCenters(true);
+        const loadMsg = {
+            from: 'bot',
+            text: '📍 Buscando centros de ayuda cerca de ti...',
+            timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, loadMsg]);
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                try {
+                    const centros = await getCentrosCercanos(latitude, longitude, 4);
+                    setNearbyCenters(centros);
+
+                    if (centros.length === 0) {
+                        const noResultMsg = {
+                            from: 'bot',
+                            text: '😔 No encontré centros de ayuda en un radio de 4km. Te recomiendo contactar a la Línea 106 o la Secretaría de Salud de Medellín al (604) 385 5555.',
+                            timestamp: new Date(),
+                        };
+                        setMessages(prev => [...prev, noResultMsg]);
+                    } else {
+                        const resultMsg = {
+                            from: 'bot',
+                            text: `🏥 Encontré ${centros.length} centro(s) de ayuda cerca de ti:`,
+                            timestamp: new Date(),
+                            centers: centros,
+                        };
+                        setMessages(prev => [...prev, resultMsg]);
+                    }
+                } catch (err) {
+                    console.error('[Chatbot] Error buscando centros:', err);
+                    const errMsg = {
+                        from: 'bot',
+                        text: '⚠️ No pude buscar centros cercanos. Puedes contactar directamente a la Línea 106 (gratuita, 24h) o a la Secretaría de Salud al (604) 385 5555.',
+                        timestamp: new Date(),
+                    };
+                    setMessages(prev => [...prev, errMsg]);
+                }
+                setLoadingCenters(false);
+            },
+            (error) => {
+                console.warn('[Chatbot] Error de geolocalización:', error);
+                const errMsg = {
+                    from: 'bot',
+                    text: '📍 No se pudo obtener tu ubicación. Verifica que tengas los permisos de ubicación activados. Mientras tanto, puedes contactar la Línea 106 (gratuita, 24h).',
+                    timestamp: new Date(),
+                };
+                setMessages(prev => [...prev, errMsg]);
+                setLoadingCenters(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
+
+    /**
+     * Maneja el envío con Enter.
+     */
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
+
+    /**
+     * Formatea el timestamp.
+     */
+    const formatTime = (date) => {
+        return new Date(date).toLocaleTimeString('es-CO', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    /**
+     * Cierra el protocolo de emergencia (no el chat).
+     */
+    const handleDismissEmergency = () => {
+        setShowEmergency(false);
     };
 
     return (
-        <div className="chatbot-container">
-            <div className="chatbot-messages">
+        <div className="psych-chatbot">
+            {/* ── Header ── */}
+            <div className="psych-chatbot__header">
+                <div className="psych-chatbot__header-avatar">
+                    <i className="fas fa-heart-pulse"></i>
+                </div>
+                <div className="psych-chatbot__header-info">
+                    <h3>Asistente de Bienestar</h3>
+                    <span className="psych-chatbot__status">
+                        <span className="psych-chatbot__status-dot"></span>
+                        Disponible 24/7
+                    </span>
+                </div>
+                <div className="psych-chatbot__header-badge">
+                    <i className="fas fa-shield-alt"></i>
+                    Confidencial
+                </div>
+            </div>
+
+            {/* ── Protocolo de emergencia (overlay) ── */}
+            {showEmergency && (
+                <div className="psych-chatbot__emergency">
+                    <div className="psych-chatbot__emergency-card">
+                        <div className="psych-chatbot__emergency-header">
+                            <i className="fas fa-exclamation-triangle"></i>
+                            <h4>Líneas de Ayuda Inmediata</h4>
+                        </div>
+                        <p className="psych-chatbot__emergency-msg">
+                            No estás solo/a. Estas líneas son gratuitas, confidenciales y están disponibles ahora:
+                        </p>
+                        <div className="psych-chatbot__emergency-lines">
+                            {(emergencyLines.length > 0 ? emergencyLines : LINEAS_FALLBACK)
+                                .filter(l => l.tipo === 'escucha' || l.tipo === 'emergencia')
+                                .slice(0, 4)
+                                .map((linea, idx) => (
+                                    <a
+                                        key={idx}
+                                        href={`tel:${linea.numero.replace(/[^0-9+]/g, '')}`}
+                                        className={`psych-chatbot__emergency-line ${linea.tipo}`}
+                                    >
+                                        <div className="psych-chatbot__emergency-line-icon">
+                                            <i className={linea.tipo === 'emergencia' ? 'fas fa-ambulance' : 'fas fa-phone-alt'}></i>
+                                        </div>
+                                        <div className="psych-chatbot__emergency-line-info">
+                                            <strong>{linea.nombre}</strong>
+                                            <span>{linea.numero}</span>
+                                        </div>
+                                        <div className="psych-chatbot__emergency-line-action">
+                                            <i className="fas fa-phone"></i> Llamar
+                                        </div>
+                                    </a>
+                                ))}
+                        </div>
+                        <button className="psych-chatbot__emergency-dismiss" onClick={handleDismissEmergency}>
+                            Continuar en el chat
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Mensajes ── */}
+            <div className="psych-chatbot__messages">
                 {messages.map((msg, idx) => (
-                    <div key={idx} className={`chatbot-message ${msg.from}`}>
-                        {msg.text.split('\n').map((line, lIdx) => (
-                            <p key={lIdx} style={{ margin: '0 0 0.5rem 0' }}>{line}</p>
-                        ))}
+                    <div
+                        key={idx}
+                        className={`psych-chatbot__msg ${msg.from} ${msg.isEmergency ? 'emergency' : ''}`}
+                    >
+                        {msg.from === 'bot' && (
+                            <div className="psych-chatbot__msg-avatar">
+                                <i className="fas fa-heart"></i>
+                            </div>
+                        )}
+                        <div className="psych-chatbot__msg-content">
+                            <div className="psych-chatbot__msg-bubble">
+                                {msg.text.split('\n').map((line, i) => (
+                                    <React.Fragment key={i}>
+                                        {line}
+                                        {i < msg.text.split('\n').length - 1 && <br />}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+
+                            {/* ── Cards de centros cercanos ── */}
+                            {msg.centers && msg.centers.length > 0 && (
+                                <div className="psych-chatbot__centers">
+                                    {msg.centers.map((centro, cIdx) => (
+                                        <div key={cIdx} className="psych-chatbot__center-card">
+                                            <div className="psych-chatbot__center-icon">
+                                                <i className={centro.tipo === 'salud_mental' ? 'fas fa-brain' : 'fas fa-hospital'}></i>
+                                            </div>
+                                            <div className="psych-chatbot__center-info">
+                                                <strong>{centro.nombre}</strong>
+                                                <span className="psych-chatbot__center-address">
+                                                    <i className="fas fa-map-marker-alt"></i> {centro.direccion}
+                                                </span>
+                                                {centro.telefono && (
+                                                    <a href={`tel:${centro.telefono.replace(/[^0-9+]/g, '')}`} className="psych-chatbot__center-phone">
+                                                        <i className="fas fa-phone"></i> {centro.telefono}
+                                                    </a>
+                                                )}
+                                                <span className="psych-chatbot__center-dist">
+                                                    📍 {centro.distancia_km} km
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <span className="psych-chatbot__msg-time">
+                                {formatTime(msg.timestamp)}
+                            </span>
+                        </div>
                     </div>
                 ))}
+
+                {/* ── Indicador de "escribiendo..." ── */}
+                {isTyping && (
+                    <div className="psych-chatbot__msg bot">
+                        <div className="psych-chatbot__msg-avatar">
+                            <i className="fas fa-heart"></i>
+                        </div>
+                        <div className="psych-chatbot__msg-content">
+                            <div className="psych-chatbot__msg-bubble psych-chatbot__typing">
+                                <span className="psych-chatbot__typing-dot"></span>
+                                <span className="psych-chatbot__typing-dot"></span>
+                                <span className="psych-chatbot__typing-dot"></span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div ref={messagesEndRef} />
             </div>
-            <form className="chatbot-input" onSubmit={handleSend}>
+
+            {/* ── Opciones rápidas ── */}
+            {showQuickOptions && (
+                <div className="psych-chatbot__quick-options">
+                    {OPCIONES_RAPIDAS.map(opt => (
+                        <button
+                            key={opt.id}
+                            className="psych-chatbot__quick-btn"
+                            onClick={() => handleQuickOption(opt.id)}
+                        >
+                            <span className="psych-chatbot__quick-icon">{opt.icon}</span>
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Input ── */}
+            <form className="psych-chatbot__input" onSubmit={(e) => { e.preventDefault(); handleSend(); }}>
                 <input
+                    ref={inputRef}
                     type="text"
-                    placeholder="Describe tus sentimientos o pide 'centros cercanos'..."
+                    placeholder="Cuéntame cómo te sientes..."
                     value={input}
-                    onChange={e => setInput(e.target.value)}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={isTyping}
+                    autoComplete="off"
+                    id="chatbot-input"
                 />
-                <button type="submit">Enviar</button>
+                <button
+                    type="submit"
+                    disabled={isTyping || !input.trim()}
+                    className="psych-chatbot__send-btn"
+                    id="chatbot-send"
+                >
+                    <i className="fas fa-paper-plane"></i>
+                </button>
             </form>
+
+            {/* ── Banner de confidencialidad ── */}
+            <div className="psych-chatbot__privacy">
+                <i className="fas fa-lock"></i>
+                Sesión privada · No se almacenan datos personales · <span className="psych-chatbot__privacy-link" onClick={() => handleQuickOption('lineas')}>Ver líneas de ayuda</span>
+            </div>
         </div>
     );
 };

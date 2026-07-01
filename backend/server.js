@@ -50,6 +50,7 @@ const juegoRoutes = require('./routes/juegoRoutes');
 const apoyoRoutes = require('./routes/apoyoRoutes');
 const congestionRoutes = require('./routes/congestionRoutes');
 const alertsRoutes = require('./routes/alertasRoutes');
+
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/juegos', juegoRoutes);
@@ -122,6 +123,16 @@ const startServer = async () => {
                 console.log('✅ Tabla reportes_congestion verificada/creada correctamente');
             } catch (migError) {
                 console.warn('⚠️ Advertencia en migración de congestión:', migError.message);
+            }
+
+            // ── Migración automática: tablas de apoyo psicológico ──
+            try {
+                const apoyoMigrationPath = path.join(__dirname, 'database', 'apoyo_migration.sql');
+                const apoyoSQL = fs.readFileSync(apoyoMigrationPath, 'utf8');
+                await pool.query(apoyoSQL);
+                console.log('✅ Tablas de apoyo psicológico verificadas/creadas correctamente');
+            } catch (apoyoError) {
+                console.warn('⚠️ Advertencia en migración de apoyo:', apoyoError.message);
             }
         } catch (dbError) {
             console.warn('⚠️ No se pudo conectar a la base de datos. El servidor iniciará de todos modos.');
