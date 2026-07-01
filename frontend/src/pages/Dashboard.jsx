@@ -59,6 +59,7 @@ const Dashboard = () => {
     const activeUser = profile || user;
     const coins = parseFloat(activeUser.saldo_metrocoins) || 0;
     const level = Math.max(1, Math.floor(coins / 250) + 1);
+    const unreadCount = notifs.filter(n => !n.leida).length;
 
     const handleLogout = () => {
         logout();
