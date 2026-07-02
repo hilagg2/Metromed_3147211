@@ -68,6 +68,11 @@ const UserNotificaciones = () => {
             ), { duration: 7000, position: 'top-right' });
         });
 
+        socket.on('alerta_eliminada', ({ id_notificacion }) => {
+            setAlertas(prev => prev.filter(a => a.id_notificacion !== id_notificacion));
+            setAlertaSeleccionada(prev => prev?.id_notificacion === id_notificacion ? null : prev);
+        });
+
         return () => socket.disconnect();
     }, [userId, fetchHistorial]);
 

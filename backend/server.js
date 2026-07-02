@@ -47,11 +47,15 @@ const authRoutes    = require('./routes/authRoutes');
 const usuarioRoutes = require('./routes/usuarioRoutes');
 const juegosRoutes  = require('./routes/juegosRoutes');
 const alertasRoutes = require('./routes/alertasRoutes');
+const reportesRoutes = require('./routes/reportesRoutes');
+const adminRoutes    = require('./routes/adminRoutes');
 
-app.use('/api/auth',     authRoutes);
-app.use('/api/usuarios', usuarioRoutes);
-app.use('/api/juegos',   juegosRoutes);
-app.use('/api/alerts',   alertasRoutes);   // ← Módulo de Alertas (RF-41 al RF-46)
+app.use('/api/auth',      authRoutes);
+app.use('/api/usuarios',  usuarioRoutes);
+app.use('/api/juegos',    juegosRoutes);
+app.use('/api/alerts',    alertasRoutes);   // ← Módulo de Alertas (RF-41 al RF-46) — NO MODIFICAR
+app.use('/api/reportes',  reportesRoutes);  // ← Módulo de Reportes (RF-33 al RF-36)
+app.use('/api/admin',     adminRoutes);     // ← Dashboard stats + Auditoría general
 
 // Ruta de prueba
 app.get('/', (req, res) => {

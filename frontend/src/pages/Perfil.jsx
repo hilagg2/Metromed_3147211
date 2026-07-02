@@ -14,10 +14,16 @@ const Perfil = ({ showSection }) => {
 
                 const config = { headers: { Authorization: `Bearer ${token}` } };
                 
-                // Asumiendo que existe una ruta en authRoutes o usuarioRoutes que devuelve el perfil completo
-                // Por ahora usaremos el localStorage y las rutas de juegos para historial
-                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-                setUserData(storedUser);
+                // Obtener datos reales del usuario desde el backend
+                const profileRes = await axios.get('http://localhost:5000/api/auth/profile', config);
+                if (profileRes.data.success) {
+                    setUserData(profileRes.data.user);
+                    // Actualizar localStorage para mantener sincronizado
+                    localStorage.setItem('user', JSON.stringify(profileRes.data.user));
+                } else {
+                    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                    setUserData(storedUser);
+                }
 
                 const histRes = await axios.get('http://localhost:5000/api/juegos/historial', config);
                 if (histRes.data.success) {
@@ -25,6 +31,8 @@ const Perfil = ({ showSection }) => {
                 }
             } catch (error) {
                 console.error('Error fetching profile data:', error);
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                setUserData(storedUser);
             } finally {
                 setLoading(false);
             }

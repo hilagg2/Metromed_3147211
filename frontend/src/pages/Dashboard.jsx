@@ -14,6 +14,7 @@ import Configuracion from './Configuracion';
 import NotificationsPanel from '../components/NotificationsPanel';
 import AlertasPreferencias from '../components/AlertasPreferencias';
 import UserNotificaciones from './UserNotificaciones';
+import UserReportes from '../components/UserReportes';
 import './Dashboard.css';
 
 const API_URL = 'http://localhost:5000';
@@ -135,6 +136,8 @@ const Dashboard = () => {
                 );
             case 'alertas':
                 return <UserNotificaciones />;
+            case 'reportes':
+                return <UserReportes />;
             default:
                 return <Inicio
                     showSection={showSection}
@@ -214,6 +217,13 @@ const Dashboard = () => {
                         text="Buzón Alertas"
                         section="alertas"
                         isActive={activeSection === 'alertas'}
+                        onClick={showSection}
+                    />
+                    <SidebarItem
+                        icon="fas fa-flag"
+                        text="Reportes"
+                        section="reportes"
+                        isActive={activeSection === 'reportes'}
                         onClick={showSection}
                     />
                     <SidebarItem

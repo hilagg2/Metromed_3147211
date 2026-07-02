@@ -76,11 +76,17 @@ const AdminJuegos = () => {
                     <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}>
                         <i className="fas fa-users nav-icon" /> Gestión de Usuarios
                     </div>
+                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/reportes'); }}>
+                        <i className="fas fa-flag nav-icon" /> Gestión de Reportes
+                    </div>
+                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin'); }}>
+                        <i className="fas fa-bell nav-icon" /> Historial de Notificaciones
+                    </div>
                     <div className="nav-item active" onClick={() => setSidebarOpen(false)}>
                         <i className="fas fa-gamepad nav-icon" /> Gestión de Juegos
                     </div>
-                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/perfil'); }}>
-                        <i className="fas fa-id-card nav-icon" /> Mi Perfil
+                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/auditoria'); }}>
+                        <i className="fas fa-shield-alt nav-icon" /> Auditorías
                     </div>
                 </nav>
 

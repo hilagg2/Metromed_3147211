@@ -8,6 +8,7 @@ const {
     marcarLeida,
     getPreferencias,
     updatePreferencias,
+    deleteAlerta,
 } = require('../controllers/alertasController');
 
 // ── Middleware de Admin ────────────────────────────────────────────────────────
@@ -38,5 +39,8 @@ router.post('/admin',               verifyToken, esAdmin, crearAlerta);
 
 // GET  /api/alerts/admin/history    → Historial global (RF-46)
 router.get('/admin/history',        verifyToken, esAdmin, getHistorialGlobal);
+
+// DELETE /api/alerts/admin/history/:id → Eliminar alerta global
+router.delete('/admin/history/:id', verifyToken, esAdmin, deleteAlerta);
 
 module.exports = router;

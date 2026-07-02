@@ -56,3 +56,12 @@ export const getHistorialGlobal = async () => {
     const res = await fetch(`${API_URL}/admin/history`, { headers: getAuthHeaders() });
     return res.json();
 };
+
+/** DELETE /api/alerts/admin/history/:id — Eliminar alerta global */
+export const deleteAlertaGlobal = async (id_notificacion) => {
+    const res = await fetch(`${API_URL}/admin/history/${id_notificacion}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+    });
+    return res.json();
+};

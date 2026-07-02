@@ -1,4 +1,5 @@
 const { supabase } = require('../config/database');
+const { pool }     = require('../config/mysqlPool');
 
 /**
  * Función auxiliar para calcular el nivel basado en MetroCoins
@@ -178,15 +179,27 @@ const getRanking = async (req, res) => {
 };
 
 /**
- * Actualizar configuración de un juego (Admin)
+ * Actualizar configuración de un juego (Admin) + Auditoría
  * PUT /api/juegos/:id
  */
 const updateJuego = async (req, res) => {
     const { id } = req.params;
     const { activo, recompensa_base } = req.body;
+    const adminId = req.user?.id;
 
     try {
-        // Construir objeto de actualización solo con campos proporcionados
+        // Obtener valores anteriores del juego para auditoría
+        let juegoAnterior = null;
+        try {
+            const { data } = await supabase
+                .from('juegos')
+                .select('activo, recompensa_base, nombre')
+                .eq('id_juego', id)
+                .single();
+            juegoAnterior = data;
+        } catch { /* Supabase puede no estar configurado */ }
+
+        // Construir objeto de actualización
         const updateData = {};
         if (activo !== undefined && activo !== null) updateData.activo = activo;
         if (recompensa_base !== undefined && recompensa_base !== null) updateData.recompensa_base = recompensa_base;
@@ -197,6 +210,33 @@ const updateJuego = async (req, res) => {
             .eq('id_juego', id);
 
         if (error) throw error;
+
+        // ── Registrar auditoría en MySQL ──────────────────────────────────
+        if (adminId) {
+            let accion = 'ACTUALIZAR';
+            let valorAnterior = null;
+            let valorNuevo = null;
+
+            if (activo !== undefined && juegoAnterior) {
+                accion = activo ? 'HABILITAR' : 'DESHABILITAR';
+                valorAnterior = String(juegoAnterior.activo);
+                valorNuevo    = String(activo);
+            } else if (recompensa_base !== undefined && juegoAnterior) {
+                accion = 'CAMBIAR_RECOMPENSA';
+                valorAnterior = String(juegoAnterior.recompensa_base);
+                valorNuevo    = String(recompensa_base);
+            }
+
+            try {
+                await pool.query(
+                    `INSERT INTO auditoria_juegos (id_juego, id_administrador, accion, valor_anterior, valor_nuevo)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [id, adminId, accion, valorAnterior, valorNuevo]
+                );
+            } catch (auditErr) {
+                console.error('⚠️  Error al registrar auditoría de juego:', auditErr.message);
+            }
+        }
 
         res.json({ success: true, message: 'Juego actualizado correctamente' });
     } catch (error) {
@@ -212,3 +252,4 @@ module.exports = {
     getRanking,
     updateJuego
 };
+

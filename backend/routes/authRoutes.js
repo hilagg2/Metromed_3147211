@@ -5,8 +5,11 @@ const {
     login,
     forgotPassword,
     verifyCode,
-    resetPassword
+    resetPassword,
+    getProfile
 } = require('../controllers/authController');
+
+const { verifyToken } = require('../middleware/auth');
 
 const {
     validateRegister,
@@ -71,5 +74,12 @@ router.post('/reset-password',
     handleValidationErrors,
     resetPassword
 );
+
+/**
+ * @route   GET /api/auth/profile
+ * @desc    Obtener perfil completo del usuario
+ * @access  Private
+ */
+router.get('/profile', verifyToken, getProfile);
 
 module.exports = router;

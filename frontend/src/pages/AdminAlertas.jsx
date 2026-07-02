@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { crearAlerta, getHistorialGlobal } from '../services/alertasService';
+import { crearAlerta, getHistorialGlobal, deleteAlertaGlobal } from '../services/alertasService';
 
 const TIPOS = [
     { value: 'retraso',         label: '🕐 Retraso' },
@@ -36,6 +36,44 @@ const AdminAlertas = () => {
     useEffect(() => {
         if (tab === 'historial') fetchHistorial();
     }, [tab]);
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('¿ELIMINAR esta alerta permanentemente? Se eliminará del historial de todos los usuarios.')) return;
+        try {
+            const res = await deleteAlertaGlobal(id);
+            if (res.success) {
+                fetchHistorial();
+                setResultado({ ok: true, text: 'Alerta eliminada correctamente.' });
+                setTimeout(() => setResultado(null), 3000);
+            } else {
+                setResultado({ ok: false, text: res.message || 'Error al eliminar alerta.' });
+                setTimeout(() => setResultado(null), 3000);
+            }
+        } catch {
+            setResultado({ ok: false, text: 'Error de red.' });
+            setTimeout(() => setResultado(null), 3000);
+        }
+    };
+
+    const handleResend = async (a) => {
+        if (!window.confirm(`¿Volver a enviar la alerta "${a.titulo}" a todos los usuarios correspondientes?`)) return;
+        setEnviando(true);
+        try {
+            const payload = {
+                tipo_evento: a.tipo_evento,
+                titulo: a.titulo,
+                descripcion: a.descripcion,
+                entidad_afectada: a.entidad_afectada
+            };
+            const res = await crearAlerta(payload);
+            setResultado({ ok: res.success, text: res.message });
+            if (res.success) fetchHistorial();
+        } catch {
+            setResultado({ ok: false, text: 'Error de red al reenviar la alerta.' });
+        }
+        setEnviando(false);
+        setTimeout(() => setResultado(null), 4000);
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -116,6 +154,11 @@ const AdminAlertas = () => {
                     <button onClick={fetchHistorial} style={{ marginBottom: '1rem', padding: '0.4rem 0.9rem', borderRadius: 7, border: '1px solid rgba(0,255,136,0.2)', background: 'rgba(0,255,136,0.05)', color: '#00ff88', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, transition: 'all 0.2s' }}>
                         🔄 Actualizar
                     </button>
+                    {resultado && tab === 'historial' && (
+                        <div style={{ marginBottom: '1rem', padding: '0.65rem 1rem', borderRadius: 8, background: resultado.ok ? 'rgba(0,255,136,0.1)' : 'rgba(255,0,85,0.1)', color: resultado.ok ? '#00ff88' : '#ff0055', fontSize: '0.82rem', textAlign: 'center', border: `1px solid ${resultado.ok ? '#00ff88' : '#ff0055'}`, fontWeight: 600 }}>
+                            {resultado.ok ? '✅ ' : '❌ '}{resultado.text}
+                        </div>
+                    )}
                     {historial.length === 0 ? (
                         <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '2rem' }}>No hay alertas registradas aún.</p>
                     ) : (
@@ -123,7 +166,7 @@ const AdminAlertas = () => {
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid rgba(0,255,136,0.2)', color: '#00b8ff' }}>
-                                        {['#', 'Tipo', 'Título', 'Afectado', 'Canales', 'Fecha'].map(h => (
+                                        {['#', 'Tipo', 'Título', 'Afectado', 'Canales', 'Fecha', 'Acciones'].map(h => (
                                             <th key={h} style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                                         ))}
                                     </tr>
@@ -140,6 +183,24 @@ const AdminAlertas = () => {
                                             <td style={{ padding: '0.75rem', color: 'rgba(255,255,255,0.7)' }}>{a.canales_enviados}</td>
                                             <td style={{ padding: '0.75rem', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
                                                 {new Date(a.fecha_generacion).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </td>
+                                            <td style={{ padding: '0.75rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'nowrap' }}>
+                                                    <button
+                                                        onClick={() => handleResend(a)}
+                                                        title="Volver a enviar"
+                                                        style={{ background: 'rgba(52,152,219,0.1)', border: 'none', color: '#3498db', padding: '0.4rem 0.6rem', borderRadius: '6px', cursor: 'pointer', transition: '0.2s', fontSize: '0.75rem', fontWeight: 600 }}
+                                                    >
+                                                        <i className="fas fa-paper-plane" /> Reenviar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(a.id_notificacion)}
+                                                        title="Eliminar permanentemente"
+                                                        style={{ background: 'rgba(255,0,85,0.1)', border: 'none', color: '#ff0055', padding: '0.4rem 0.6rem', borderRadius: '6px', cursor: 'pointer', transition: '0.2s', fontSize: '0.75rem', fontWeight: 600 }}
+                                                    >
+                                                        <i className="fas fa-trash" /> Borrar
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

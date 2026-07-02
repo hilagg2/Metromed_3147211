@@ -274,10 +274,57 @@ const resetPassword = async (req, res) => {
     }
 };
 
+/**
+ * RF-xx: Obtener perfil completo del usuario autenticado
+ * GET /api/auth/profile
+ */
+const getProfile = async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        const [users] = await pool.query(
+            `SELECT id_usuario AS id, id_rol AS rol, nombre, correo,
+                    saldo_metrocoins, verificado, estado,
+                    DATE_FORMAT(fecha_registro, '%Y-%m-%d') AS fecha_registro
+             FROM usuarios WHERE id_usuario = ?`,
+            [userId]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        const user = users[0];
+
+        res.json({
+            success: true,
+            user: {
+                id:               user.id,
+                nombre:           user.nombre,
+                correo:           user.correo,
+                rol:              user.rol,
+                saldo_metrocoins: parseFloat(user.saldo_metrocoins) || 0,
+                verificado:       user.verificado,
+                estado:           user.estado,
+                fecha_registro:   user.fecha_registro,
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en getProfile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener el perfil',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 module.exports = {
     register,
     login,
     forgotPassword,
     verifyCode,
-    resetPassword
+    resetPassword,
+    getProfile
 };

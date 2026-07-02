@@ -44,6 +44,35 @@ const getHistorialGlobal = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/admin/alerts/history/:id  —  Eliminar alerta global
+// ─────────────────────────────────────────────────────────────────────────────
+const deleteAlerta = async (req, res) => {
+    const { id } = req.params;
+    const io = req.app.get('io');
+    
+    try {
+        const [result] = await pool.query(
+            'DELETE FROM notificaciones_globales WHERE id_notificacion = ?',
+            [id]
+        );
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Alerta no encontrada.' });
+        }
+
+        // Emitir evento para que los clientes actualicen su interfaz en tiempo real
+        if (io) {
+            io.emit('alerta_eliminada', { id_notificacion: parseInt(id, 10) });
+        }
+
+        res.json({ success: true, message: 'Alerta eliminada correctamente.' });
+    } catch (error) {
+        console.error('Error al eliminar alerta:', error);
+        res.status(500).json({ success: false, message: 'Error al eliminar alerta.' });
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/alerts/history  —  Historial individual del usuario (RF-45)
 // ─────────────────────────────────────────────────────────────────────────────
 const getHistorialUsuario = async (req, res) => {
@@ -152,4 +181,5 @@ module.exports = {
     marcarLeida,
     getPreferencias,
     updatePreferencias,
+    deleteAlerta,
 };
