@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import html2canvas from 'html2canvas';
+import { API_BASE_URL } from '../config/api';
 import './Wrapped.css';
 
 const Wrapped = () => {
@@ -22,8 +23,7 @@ const Wrapped = () => {
         const fetchWrappedData = async () => {
             setLoading(true);
             try {
-                const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-                const response = await fetch(`${baseUrl}/api/usuarios/${userId}/wrapped?periodo=${periodo}`);
+                const response = await fetch(`${API_BASE_URL}/api/usuarios/${userId}/wrapped?periodo=${periodo}`);
                 if (!response.ok) {
                     throw new Error('Error al obtener los datos del Wrapped');
                 }

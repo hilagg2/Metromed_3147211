@@ -3,7 +3,9 @@
  * Servicio frontend para consumir la API de Alertas y Notificaciones.
  */
 
-const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/alerts`;
+import { API_BASE_URL } from '../config/api';
+
+const API_URL = `${API_BASE_URL}/api/alerts`;
 
 const getAuthHeaders = () => {
     const token = localStorage.getItem('token');

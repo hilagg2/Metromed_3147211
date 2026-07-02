@@ -2,9 +2,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import toast, { Toaster } from 'react-hot-toast';
 import { getHistorialUsuario, marcarAlertaLeida } from '../services/alertasService';
+import { API_BASE_URL } from '../config/api';
 import './UserNotificaciones.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = API_BASE_URL;
 
 const TIPO_META = {
     retraso:          { icon: '🕐', label: 'Retraso', color: '#ff0055' },

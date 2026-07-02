@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../services/authService';
+import { API_BASE_URL } from '../config/api';
 import './Dashboard_admin.css';
 
 const initials = (name = '') => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const baseUrl = API_BASE_URL;
 
 const Gestion_usuario = () => {
     const navigate = useNavigate();
