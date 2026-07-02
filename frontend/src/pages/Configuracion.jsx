@@ -1,4 +1,5 @@
 import React from 'react';
+import PreferenciasAlertas from './PreferenciasAlertas';
 
 const Configuracion = () => {
     return (
@@ -7,14 +8,7 @@ const Configuracion = () => {
 
             <div className="config-section">
                 <div className="config-item">
-                    <span>Notificaciones</span>
-                    <label className="toggle-switch">
-                        <input type="checkbox" defaultChecked />
-                        <span className="toggle-slider"></span>
-                    </label>
-                </div>
-                <div className="config-item">
-                    <span>Sonidos</span>
+                    <span>Sonidos de la Interfaz</span>
                     <label className="toggle-switch">
                         <input type="checkbox" defaultChecked />
                         <span className="toggle-slider"></span>
@@ -29,11 +23,8 @@ const Configuracion = () => {
                 </div>
             </div>
 
-            <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                <button className="action-btn">
-                    <i className="fas fa-save"></i> Guardar Cambios
-                </button>
-            </div>
+            {/* Módulo RF-41, RF-42 */}
+            <PreferenciasAlertas />
         </div>
     );
 };

@@ -11,6 +11,7 @@ import Trafico from './pages/Trafico'
 import Apoyopsiqui from './pages/Apoyopsiqui'
 import Perfil_admin from './pages/Perfil_admin'
 import UserNotificaciones from './pages/UserNotificaciones'
+import AdminAuditoria from './pages/AdminAuditoria'
 
 // Secciones del Dashboard
 import Juegos from './pages/Juegos'
@@ -39,6 +40,7 @@ function App() {
 
                 <Route path="/Dashboard_admin" element={<Dashboard_admin />} />
                 <Route path="/admin/usuarios" element={<Gestion_usuario />} />
+                <Route path="/admin/auditoria" element={<AdminAuditoria />} />
                 <Route path="/trafico" element={<Trafico />} /> {/* Ruta para mapa completo */}
                 <Route path="/apoyo-psicologico" element={<Apoyopsiqui />} />
                 <Route path="/admin/perfil" element={<Perfil_admin />} />

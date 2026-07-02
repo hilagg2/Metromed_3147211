@@ -1,5 +1,5 @@
 -- Migración: Módulo de Alertas y Notificaciones (RF-41 al RF-46)
--- Ejecutar sobre la base de datos metromed_db
+-- Script en sintaxis PostgreSQL
 
 -- RF-41, RF-42: Preferencias individuales de alerta por usuario
 CREATE TABLE IF NOT EXISTS preferencias_alertas (
@@ -9,31 +9,33 @@ CREATE TABLE IF NOT EXISTS preferencias_alertas (
     alerta_retraso       BOOLEAN DEFAULT TRUE,
     alerta_cierre        BOOLEAN DEFAULT TRUE,
     alerta_mantenimiento BOOLEAN DEFAULT TRUE,
-    fecha_actualizacion  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    fecha_actualizacion  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 -- RF-44, RF-46: Registro global de notificaciones (auditoría del Admin)
 CREATE TABLE IF NOT EXISTS notificaciones_globales (
-    id_notificacion   INT AUTO_INCREMENT PRIMARY KEY,
-    tipo_evento       ENUM('retraso','cierre_estacion','mantenimiento') NOT NULL,
+    id_notificacion   SERIAL PRIMARY KEY,
+    tipo_evento       VARCHAR(50) NOT NULL CHECK (tipo_evento IN ('retraso','cierre_estacion','mantenimiento')),
     titulo            VARCHAR(150) NOT NULL,
     descripcion       TEXT NOT NULL,
     entidad_afectada  VARCHAR(100) NOT NULL,
-    fecha_generacion  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_generacion  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     canales_enviados  VARCHAR(50) NOT NULL DEFAULT 'panel'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+CREATE INDEX IF NOT EXISTS idx_ng_fecha_generacion
+ON notificaciones_globales (fecha_generacion DESC);
 
 -- RF-45: Historial individual por usuario + estado de lectura
 CREATE TABLE IF NOT EXISTS historial_alertas_usuario (
-    id_historial      INT AUTO_INCREMENT PRIMARY KEY,
+    id_historial      SERIAL PRIMARY KEY,
     id_usuario        INT NOT NULL,
     id_notificacion   INT NOT NULL,
     leida             BOOLEAN DEFAULT FALSE,
-    fecha_recepcion   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fecha_recepcion   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_usuario)      REFERENCES usuarios(id_usuario)               ON DELETE CASCADE,
-    FOREIGN KEY (id_notificacion) REFERENCES notificaciones_globales(id_notificacion) ON DELETE CASCADE,
-    INDEX idx_usuario_fecha (id_usuario, fecha_recepcion DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    FOREIGN KEY (id_notificacion) REFERENCES notificaciones_globales(id_notificacion) ON DELETE CASCADE
+);
 
-SELECT 'Tablas de alertas creadas correctamente' AS mensaje;
+CREATE INDEX IF NOT EXISTS idx_usuario_fecha ON historial_alertas_usuario (id_usuario, fecha_recepcion DESC);

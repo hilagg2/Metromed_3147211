@@ -1,65 +1,6 @@
 const { pool } = require('../config/database');
-const nodemailer = require('nodemailer');
+const { sendAlertNotification } = require('../utils/emailService');
 require('dotenv').config();
-
-// Configurar transportador de correo dinámicamente
-let transporter = null;
-
-const getTransporter = async () => {
-    if (transporter) return transporter;
-
-    if (process.env.EMAIL_HOST && process.env.EMAIL_USER) {
-        // Usar SMTP real configurado en .env
-        transporter = nodemailer.createTransport({
-            host:   process.env.EMAIL_HOST,
-            port:   process.env.EMAIL_PORT,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD,
-            },
-        });
-    } else {
-        // Fallback a Ethereal (Correo de prueba) si no hay variables configuradas
-        console.log('⚠️ No se encontraron credenciales SMTP en .env. Generando cuenta de prueba en Ethereal Email...');
-        const testAccount = await nodemailer.createTestAccount();
-        transporter = nodemailer.createTransport({
-            host: "smtp.ethereal.email",
-            port: 587,
-            secure: false,
-            auth: {
-                user: testAccount.user,
-                pass: testAccount.pass,
-            },
-        });
-    }
-    return transporter;
-};
-
-/**
- * Envía un correo de alerta a un usuario.
- * @param {object} param0 - { to, subject, html }
- */
-const sendAlertEmail = async ({ to, subject, html }) => {
-    try {
-        const mailTransporter = await getTransporter();
-        const fromEmail = process.env.EMAIL_USER || 'no-reply@metromed.local';
-        
-        const info = await mailTransporter.sendMail({
-            from: `"MetroMed Alertas" <${fromEmail}>`,
-            to,
-            subject,
-            html,
-        });
-        
-        console.log(`✅ Correo de alerta enviado exitosamente a ${to}`);
-        if (!process.env.EMAIL_HOST) {
-            console.log(`🔗 Puedes ver el correo enviado aquí: ${nodemailer.getTestMessageUrl(info)}`);
-        }
-    } catch (err) {
-        console.error(`⚠️  Error enviando correo a ${to}:`, err.message);
-    }
-};
 
 /**
  * Mapa de columnas válidas (lista blanca) para evitar SQL Injection. (RN-42.1)
@@ -83,91 +24,112 @@ const TIPO_ICONOS = {
  * RF-44, RN-44.2: Procesa y distribuye una alerta a todos los usuarios
  * que tienen activo el tipo de evento, validando sus canales (RN-41.1).
  *
- * @param {object} io             - Instancia de Socket.io
- * @param {object} alertaData     - { tipo_evento, titulo, descripcion, entidad_afectada }
- * @returns {{ id_notificacion, usuariosNotificados }}
+ * Broadcasting paralelo: panelOps y emailOps se ejecutan con Promise.allSettled
+ * para que el fallo de un canal no cancele los demás (RN-43.2).
+ *
+ * @param {object} io          - Instancia de Socket.io
+ * @param {object} alertaData  - { tipo_evento, titulo, descripcion, entidad_afectada }
+ * @returns {{ id_notificacion, usuariosNotificados, canalesUsados }}
  */
 const procesarYEnviarAlerta = async (io, { tipo_evento, titulo, descripcion, entidad_afectada }) => {
     const columna = TIPO_A_COLUMNA[tipo_evento];
     if (!columna) throw new Error(`Tipo de evento inválido: ${tipo_evento}`);
 
-    const canalesEnviados = [];
-
-    // 1. Guardar en el registro global de auditoría (RF-46, RN-46.2)
+    // ── 1. Guardar en el registro global de auditoría (RF-46, RN-46.2) ──────
     const [rows] = await pool.query(
         `INSERT INTO notificaciones_globales
          (tipo_evento, titulo, descripcion, entidad_afectada, canales_enviados)
-         VALUES ($1, $2, $3, $4, 'panel,correo') RETURNING id_notificacion`,
+         VALUES ($1, $2, $3, $4, 'pendiente') RETURNING id_notificacion, fecha_generacion`,
         [tipo_evento, titulo, descripcion, entidad_afectada]
     );
-    const id_notificacion = rows[0].id_notificacion;
+    const id_notificacion  = rows[0].id_notificacion;
+    const fecha_generacion = rows[0].fecha_generacion;
 
-    // 2. Obtener usuarios que tienen activo este tipo de alerta (RF-42.1)
+    // ── 2. Obtener usuarios con este tipo de alerta activo (RF-42.1) ─────────
     const [usuariosDestino] = await pool.query(
         `SELECT u.id_usuario, u.correo, u.nombre,
-                COALESCE(p.canal_panel, true) as canal_panel, 
-                COALESCE(p.canal_correo, false) as canal_correo
+                COALESCE(p.canal_panel,  true)  AS canal_panel,
+                COALESCE(p.canal_correo, false) AS canal_correo
          FROM usuarios u
          LEFT JOIN preferencias_alertas p ON u.id_usuario = p.id_usuario
          WHERE COALESCE(p.${columna}, true) = true`
     );
 
+    // ── 3. Payload canónico (RN-44.3: tipo + entidad + timestamp) ────────────
     const payload = {
-        id:               id_notificacion,
+        id:              id_notificacion,
         tipo_evento,
         titulo,
         descripcion,
         entidad_afectada,
-        fecha_recepcion:  new Date().toISOString(),
+        fecha_recepcion: fecha_generacion
+            ? new Date(fecha_generacion).toISOString()
+            : new Date().toISOString(),
     };
 
-    // 3. Distribuir por canal a cada usuario (RN-41.1, RN-43.2)
-    for (const user of usuariosDestino) {
-        // 3a. Guardar en historial individual (RF-45, RN-45.2)
-        await pool.query(
-            `INSERT INTO historial_alertas_usuario (id_usuario, id_notificacion) VALUES ($1, $2)`,
+    // ── 4. Persistir historial individual para cada destinatario (RF-45) ─────
+    const historialInserts = usuariosDestino.map(user =>
+        pool.query(
+            'INSERT INTO historial_alertas_usuario (id_usuario, id_notificacion) VALUES ($1, $2)',
             [user.id_usuario, id_notificacion]
-        );
+        )
+    );
+    await Promise.allSettled(historialInserts);
 
-        // 3b. Canal Panel en tiempo real con Socket.io (RN-41.2, RN-43.2)
+    // ── 5. Broadcasting PARALELO: panel + correo (RN-41.2, RN-43.2) ─────────
+    const panelOps = [];
+    const emailOps = [];
+
+    for (const user of usuariosDestino) {
+        // Canal Panel — Socket.io en tiempo real (RN-43.2)
+        // El orden DESC está garantizado por fecha_generacion en las queries (RN-43.3)
         if (user.canal_panel) {
-            io.to(`user_${user.id_usuario}`).emit('nueva_notificacion', payload);
-            if (!canalesEnviados.includes('panel')) canalesEnviados.push('panel');
+            panelOps.push(
+                Promise.resolve(
+                    io.to(`user_${user.id_usuario}`).emit('nueva_notificacion', payload)
+                )
+            );
         }
 
-        // 3c. Canal Correo electrónico (RN-41.2)
+        // Canal Correo electrónico (RN-41.2)
         if (user.canal_correo) {
-            await sendAlertEmail({
-                to:      user.correo,
-                subject: `[MetroMed] ${TIPO_ICONOS[tipo_evento]} ${titulo}`,
-                html: `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <h2 style="color: #1e3a5f;">🚇 MetroMed — Alerta de Transporte</h2>
-                        <p>Hola, <strong>${user.nombre}</strong>.</p>
-                        <div style="background: #f4f6f8; border-left: 4px solid #e74c3c; padding: 16px; border-radius: 4px;">
-                            <p><strong>${TIPO_ICONOS[tipo_evento]} ${tipo_evento.replace('_', ' ').toUpperCase()}</strong></p>
-                            <p><strong>📍 Afectado:</strong> ${entidad_afectada}</p>
-                            <p>${descripcion}</p>
-                        </div>
-                        <p style="color: #888; font-size: 12px; margin-top: 24px;">
-                            Recibiste este correo porque tienes activadas las alertas de correo en MetroMed.<br>
-                            Puedes desactivarlas en Configuración &gt; Preferencias de Alertas.
-                        </p>
-                    </div>`,
-            });
-            if (!canalesEnviados.includes('correo')) canalesEnviados.push('correo');
+            emailOps.push(
+                sendAlertNotification(
+                    user.correo,
+                    user.nombre,
+                    tipo_evento,
+                    titulo,
+                    descripcion,
+                    entidad_afectada,
+                    payload.fecha_recepcion
+                ).catch(err => {
+                    // El catch individual previene que un error cancele los demás
+                    console.error(`⚠️  Error enviando correo a ${user.correo}:`, err.message);
+                })
+            );
         }
     }
 
-    // Actualizar registro con canales realmente usados (RN-46.2)
-    if (canalesEnviados.length > 0) {
-        await pool.query(
-            'UPDATE notificaciones_globales SET canales_enviados = $1 WHERE id_notificacion = $2',
-            [canalesEnviados.join(','), id_notificacion]
-        );
-    }
+    // Ejecutar ambos canales EN PARALELO (RN-43.2)
+    const [panelResults, emailResults] = await Promise.all([
+        Promise.allSettled(panelOps),
+        Promise.allSettled(emailOps),
+    ]);
 
-    return { id_notificacion, usuariosNotificados: usuariosDestino.length };
+    // ── 6. Determinar canales realmente usados y actualizar registro (RN-46.2) ─
+    const canalesUsados = [];
+    if (panelResults.some(r => r.status === 'fulfilled')) canalesUsados.push('panel');
+    if (emailResults.some(r => r.status === 'fulfilled')) canalesUsados.push('correo');
+    if (canalesUsados.length === 0) canalesUsados.push('ninguno');
+
+    await pool.query(
+        'UPDATE notificaciones_globales SET canales_enviados = $1 WHERE id_notificacion = $2',
+        [canalesUsados.join(','), id_notificacion]
+    );
+
+    console.log(`📡 Alerta #${id_notificacion} enviada → ${usuariosDestino.length} usuario(s) | Canales: [${canalesUsados.join(', ')}]`);
+
+    return { id_notificacion, usuariosNotificados: usuariosDestino.length, canalesUsados };
 };
 
 module.exports = { procesarYEnviarAlerta };

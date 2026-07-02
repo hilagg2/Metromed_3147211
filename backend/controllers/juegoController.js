@@ -1,6 +1,27 @@
 const { pool } = require('../config/database');
 
-// Obtener la configuración de todos los juegos
+/**
+ * @module juegoController
+ * @description Controlador del módulo de Gamificación y Juegos de MetroMed.
+ * Gestiona la economía de MetroCoins: configuración de juegos, registro de partidas,
+ * transacciones atómicas de saldo, historial personal y ranking global.
+ *
+ * Tabla principal: `configuracion_juegos` (habilita/deshabilita juegos y define su premio)
+ * Tabla de saldo: `usuarios.saldo_metrocoins`
+ * Tabla de movimientos: `metrocoins` (cada partida genera una fila)
+ */
+
+/**
+ * Obtiene la configuración actual de todos los juegos disponibles.
+ * Devuelve `id_juego`, `nombre`, `habilitado` y `metrocoins_premio` para que
+ * el frontend pueda mostrar o esconder la tarjeta del juego y su recompensa.
+ *
+ * @async
+ * @function getJuegosConfig
+ * @route GET /api/juegos/config
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - JSON: { success, config: [...] }
+ */
 const getJuegosConfig = async (req, res) => {
     try {
         const [config] = await pool.query(
@@ -13,7 +34,16 @@ const getJuegosConfig = async (req, res) => {
     }
 };
 
-// Actualizar configuración de un juego (Admin)
+/**
+ * Actualiza la configuración de un juego específico. Exclusivo para Administradores.
+ * Permite habilitar/deshabilitar el juego y cambiar los MetroCoins que otorga por partida.
+ *
+ * @async
+ * @function updateJuegoConfig
+ * @route PUT /api/juegos/config
+ * @param {import('express').Request} req - Body: { id_juego: string, habilitado: boolean, metrocoins_premio: number }
+ * @param {import('express').Response} res
+ */
 const updateJuegoConfig = async (req, res) => {
     const { id_juego, habilitado, metrocoins_premio } = req.body;
     try {
@@ -28,13 +58,29 @@ const updateJuegoConfig = async (req, res) => {
     }
 };
 
-// Registrar una partida y sumar MetroCoins
+/**
+ * Registra el resultado de una partida y acredita los MetroCoins al usuario.
+ *
+ * Flujo transaccional (garantiza atomicidad con BEGIN/COMMIT/ROLLBACK):
+ *  1. Verifica que el juego existe y está habilitado.
+ *  2. Abre una transacción de BD.
+ *  3. Suma `cantidad_obtenida` al saldo del usuario (`usuarios.saldo_metrocoins`).
+ *  4. Inserta un registro en `metrocoins` con descripción "Partida: <nombre_juego>".
+ *  5. Hace COMMIT y retorna el nuevo saldo actualizado.
+ *  6. En caso de error hace ROLLBACK para evitar inconsistencias en el saldo.
+ *
+ * @async
+ * @function registrarPartida
+ * @route POST /api/juegos/partida
+ * @param {import('express').Request} req - Body: { id_juego: string, cantidad_obtenida: number }. `req.user.id` por token JWT.
+ * @param {import('express').Response} res - JSON: { success, message, nuevo_saldo: number }
+ */
 const registrarPartida = async (req, res) => {
     const { id_juego, cantidad_obtenida } = req.body;
     const id_usuario = req.user.id;
 
     try {
-        // Obtener el nombre del juego para la descripción
+        // Verificar que el juego existe y está activo
         const [juegos] = await pool.query(
             'SELECT nombre, habilitado FROM configuracion_juegos WHERE id_juego = $1',
             [id_juego]
@@ -50,16 +96,16 @@ const registrarPartida = async (req, res) => {
 
         const nombreJuego = juegos[0].nombre;
 
-        // Iniciar transacción de saldo e historial
+        // Iniciar transacción atómica para evitar inconsistencias de saldo
         await pool.query('BEGIN');
 
-        // Sumar al saldo del usuario
+        // 1. Sumar al saldo global del usuario
         await pool.query(
             'UPDATE usuarios SET saldo_metrocoins = COALESCE(saldo_metrocoins, 0) + $1 WHERE id_usuario = $2',
             [cantidad_obtenida, id_usuario]
         );
 
-        // Guardar en el historial de metrocoins
+        // 2. Registrar el movimiento individual en el historial de monedas
         await pool.query(
             `INSERT INTO metrocoins (id_usuario, tipo_movimiento, cantidad, descripcion, fecha) 
              VALUES ($1, 'ganado', $2, $3, NOW())`,
@@ -68,7 +114,7 @@ const registrarPartida = async (req, res) => {
 
         await pool.query('COMMIT');
 
-        // Obtener saldo actualizado
+        // Retornar saldo fresco de la BD para sincronizar el frontend
         const [userRows] = await pool.query(
             'SELECT saldo_metrocoins FROM usuarios WHERE id_usuario = $1',
             [id_usuario]
@@ -81,6 +127,7 @@ const registrarPartida = async (req, res) => {
         });
 
     } catch (error) {
+        // Revertir la transacción si algo salió mal para proteger el saldo
         if (pool.query) {
             try { await pool.query('ROLLBACK'); } catch (_) {}
         }
@@ -89,7 +136,18 @@ const registrarPartida = async (req, res) => {
     }
 };
 
-// Obtener historial de partidas de un usuario
+/**
+ * Obtiene el historial de partidas del usuario autenticado.
+ * Filtra los movimientos de `metrocoins` con descripción "Partida:%" para mostrar
+ * solo las partidas jugadas, excluyendo otras transacciones (compras, bonificaciones).
+ * Extrae el nombre del juego eliminando el prefijo "Partida: " de la descripción.
+ *
+ * @async
+ * @function getHistorialPartidas
+ * @route GET /api/juegos/historial
+ * @param {import('express').Request} req - `req.user.id` por token JWT.
+ * @param {import('express').Response} res - JSON: { success, historial: [{ id, cantidad, fecha, juego }] }
+ */
 const getHistorialPartidas = async (req, res) => {
     const id_usuario = req.user.id;
     try {
@@ -101,7 +159,7 @@ const getHistorialPartidas = async (req, res) => {
             [id_usuario]
         );
         
-        // Formatear para retornar solo el nombre del juego
+        // Formatear para retornar solo el nombre del juego sin el prefijo técnico
         const logs = historial.map(item => ({
             id: item.id_movimiento,
             cantidad: item.cantidad,
@@ -116,7 +174,16 @@ const getHistorialPartidas = async (req, res) => {
     }
 };
 
-// Obtener ranking general
+/**
+ * Obtiene el ranking global de los 15 mejores jugadores, ordenado por saldo de MetroCoins.
+ * Usa `COALESCE` para tratar nulos como 0 y evitar errores en usuarios sin saldo.
+ *
+ * @async
+ * @function getRanking
+ * @route GET /api/juegos/ranking
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - JSON: { success, ranking: [{ id_usuario, nombre, total_coins }] }
+ */
 const getRanking = async (req, res) => {
     try {
         const [ranking] = await pool.query(
@@ -132,15 +199,29 @@ const getRanking = async (req, res) => {
     }
 };
 
-// Obtener estadísticas de participación en los juegos (Admin)
+/**
+ * Obtiene estadísticas globales de participación en todos los juegos. Exclusivo para Administradores.
+ *
+ * Calcula:
+ *  - `total_partidas`: número total de rondas jugadas en toda la plataforma.
+ *  - `total_coins`: suma de MetroCoins distribuidos por juegos.
+ *  - `desglose`: breakdown por juego (cuántas partidas y cuántas monedas generó cada uno).
+ *  - `top_player`: el usuario con más partidas jugadas y su total acumulado.
+ *
+ * @async
+ * @function getEstadisticas
+ * @route GET /api/juegos/estadisticas
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res - JSON: { success, stats: { total_partidas, total_coins, desglose, top_player } }
+ */
 const getEstadisticas = async (req, res) => {
     try {
-        // Total de partidas jugadas
+        // Totales globales de partidas y monedas
         const [totales] = await pool.query(
             "SELECT COUNT(*) as total_partidas, SUM(cantidad) as total_coins_entregadas FROM metrocoins WHERE descripcion LIKE 'Partida:%'"
         );
 
-        // Desglose de partidas por juego
+        // Desglose agrupado por nombre de juego
         const [desglose] = await pool.query(
             `SELECT descripcion as juego_desc, COUNT(*) as cantidad_jugada, SUM(cantidad) as monedas_generadas 
              FROM metrocoins 
@@ -154,7 +235,7 @@ const getEstadisticas = async (req, res) => {
             monedas: parseInt(d.monedas_generadas || 0, 10)
         }));
 
-        // Jugador con más partidas
+        // Jugador más activo (mayor número de partidas jugadas)
         const [topPlayer] = await pool.query(
             `SELECT u.nombre, COUNT(m.id_movimiento) as total_partidas, SUM(m.cantidad) as total_ganado
              FROM metrocoins m

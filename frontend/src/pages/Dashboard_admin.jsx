@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { logout } from '../services/authService';
 import AdminAlertas from './AdminAlertas';
 import './Dashboard_admin.css';
@@ -9,9 +9,16 @@ const initials = (name = '') => name.split(' ').map(w => w[0]).join('').slice(0,
 
 const Dashboard_admin = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const adminUser = JSON.parse(localStorage.getItem('user') || '{}');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeSection, setActiveSection] = useState('dashboard');
+
+    useEffect(() => {
+        if (location.state?.section) {
+            setActiveSection(location.state.section);
+        }
+    }, [location]);
 
     const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -34,7 +41,14 @@ const Dashboard_admin = () => {
                 <nav className="sidebar-nav">
                     <div className="nav-section-label">Principal</div>
 
-                    {/* Al hacer click redirige a la página de gestión de usuarios */}
+                    <div
+                        className={`nav-item ${activeSection === 'dashboard' ? 'active' : ''}`}
+                        onClick={() => { setSidebarOpen(false); setActiveSection('dashboard'); navigate('/Dashboard_admin'); }}
+                    >
+                        <i className="fas fa-home nav-icon" />
+                        Inicio
+                    </div>
+
                     <div
                         className="nav-item"
                         onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}
@@ -44,20 +58,20 @@ const Dashboard_admin = () => {
                     </div>
 
                     <div
-                        className="nav-item"
-                        onClick={() => { setSidebarOpen(false); navigate('/Dashboard/juegos'); }}
-                    >
-                        <i className="fas fa-gamepad nav-icon" />
-                        Gestión de Juegos
-                    </div>
-
-                    <div
-                        className="nav-item"
+                        className={`nav-item ${activeSection === 'alertas' ? 'active' : ''}`}
                         onClick={() => { setSidebarOpen(false); setActiveSection('alertas'); }}
                         style={{ background: activeSection === 'alertas' ? 'rgba(26,110,196,0.15)' : 'transparent', borderRadius: 8 }}
                     >
                         <i className="fas fa-bell nav-icon" />
                         Gestión de Alertas
+                    </div>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/auditoria'); }}
+                    >
+                        <i className="fas fa-history nav-icon" />
+                        Registro de Auditoría
                     </div>
 
                     <div

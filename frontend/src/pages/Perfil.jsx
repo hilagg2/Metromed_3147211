@@ -12,6 +12,13 @@ const Perfil = () => {
         const fetchProfile = async () => {
             try {
                 const profileData = await getProfile();
+                // Sincronizar el saldo actualizado en localStorage
+                // para que otros componentes también tengan el dato fresco
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                localStorage.setItem('user', JSON.stringify({
+                    ...storedUser,
+                    saldo_metrocoins: profileData.saldo_metrocoins
+                }));
                 setUser(profileData);
             } catch (err) {
                 console.error(err);
@@ -21,6 +28,8 @@ const Perfil = () => {
             }
         };
 
+        // Re-ejecutar cada vez que el usuario navega al perfil
+        setLoading(true);
         fetchProfile();
     }, []);
 
@@ -42,9 +51,14 @@ const Perfil = () => {
         );
     }
 
-    // Formatear fecha de registro
-    const fechaReg = new Date(user.fecha_registro);
-    const miembroDesde = fechaReg.toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+    // Formatear fecha de registro con validación
+    let miembroDesde = 'MetroMed';
+    if (user.fecha_registro) {
+        const fechaReg = new Date(user.fecha_registro);
+        if (!isNaN(fechaReg.getTime())) {
+            miembroDesde = fechaReg.toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+        }
+    }
 
     // Calcular nivel dinámico (1 nivel por cada 250 MetroCoins, mínimo nivel 1)
     const metrocoins = parseFloat(user.saldo_metrocoins) || 0;

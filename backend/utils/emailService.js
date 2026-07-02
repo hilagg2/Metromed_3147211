@@ -169,7 +169,57 @@ const sendCongestionNotification = async (email, stationName, level, nombre) => 
     }
 };
 
+const sendAlertNotification = async (email, nombre, tipo_evento, titulo, descripcion, entidad_afectada, fecha_recepcion) => {
+    try {
+        if (process.env.EMAIL_HOST === 'smtp.example.com' || !process.env.EMAIL_HOST) {
+            console.log('\n' + '='.repeat(50));
+            console.log(`📧 [MODO DESARROLLO] Notificación de Alerta Enviada`);
+            console.log(`Destinatario: ${email}`);
+            console.log(`Asunto: [MetroMed] ${titulo}`);
+            console.log(`Mensaje: Hola ${nombre || 'Usuario'}. Evento: ${tipo_evento}, Afectado: ${entidad_afectada}`);
+            console.log('='.repeat(50) + '\n');
+            return { success: true };
+        }
+
+        const TIPO_ICONOS = {
+            retraso:          '🕐',
+            cierre_estacion:  '🚫',
+            mantenimiento:    '🔧',
+        };
+        const icon = TIPO_ICONOS[tipo_evento] || '🔔';
+
+        const mailOptions = {
+            from: `"MetroMed Alertas" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: `[MetroMed] ${icon} ${titulo}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #1e3a5f;">🚇 MetroMed — Alerta de Transporte</h2>
+                    <p>Hola, <strong>${nombre || 'Usuario'}</strong>.</p>
+                    <div style="background: #f4f6f8; border-left: 4px solid #e74c3c; padding: 16px; border-radius: 4px;">
+                        <p><strong>${icon} ${tipo_evento.replace('_', ' ').toUpperCase()}</strong></p>
+                        <p><strong>📍 Afectado:</strong> ${entidad_afectada}</p>
+                        <p>${descripcion}</p>
+                        <p style="color: #888; font-size: 12px;">🕐 ${new Date(fecha_recepcion).toLocaleString('es-CO')}</p>
+                    </div>
+                    <p style="color: #888; font-size: 12px; margin-top: 24px;">
+                        Recibiste este correo porque tienes activadas las alertas de correo en MetroMed.<br>
+                        Puedes desactivarlas en Configuración &gt; Preferencias de Alertas.
+                    </p>
+                </div>`
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`✅ Correo de alerta enviado exitosamente a ${email} (${info.messageId})`);
+        return { success: true };
+    } catch (err) {
+        console.error('❌ Error enviando mail de alerta:', err);
+        throw err;
+    }
+};
+
 module.exports = {
     sendVerificationCode,
-    sendCongestionNotification
+    sendCongestionNotification,
+    sendAlertNotification
 };

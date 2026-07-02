@@ -127,8 +127,14 @@ const Juegos = () => {
         try {
             const res = await registrarPartida(idJuego, monedas);
             if (res.success) {
-                // Actualizar saldo del usuario localmente
+                // Actualizar saldo del usuario localmente en el estado del componente
                 setUser(prev => prev ? { ...prev, saldo_metrocoins: res.nuevo_saldo } : null);
+                // Sincronizar también en localStorage para que Perfil.jsx lo refleje inmediatamente
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                localStorage.setItem('user', JSON.stringify({
+                    ...storedUser,
+                    saldo_metrocoins: res.nuevo_saldo
+                }));
                 // Volver a cargar historial y ranking
                 const histData = await getHistorialPartidas();
                 setHistorial(histData);
@@ -263,7 +269,7 @@ const Juegos = () => {
                 setTimeout(() => {
                     const matchedUpdated = updatedCards.map(c =>
                         c.id === first.id || c.id === second.id
-                            ? { ...c, matched: true, flipped: false }
+                            ? { ...c, matched: true, flipped: true }
                             : c
                     );
                     setMemoryCards(matchedUpdated);

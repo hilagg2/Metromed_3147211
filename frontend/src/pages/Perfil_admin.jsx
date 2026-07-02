@@ -31,17 +31,42 @@ const Perfil_admin = () => {
                 <nav className="sidebar-nav">
                     <div className="nav-section-label">Principal</div>
 
-                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin'); }}>
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin'); }}
+                    >
                         <i className="fas fa-home nav-icon" />
                         Inicio
                     </div>
 
-                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}>
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}
+                    >
                         <i className="fas fa-users nav-icon" />
                         Gestión de Usuarios
                     </div>
 
-                    <div className="nav-item active" onClick={() => setSidebarOpen(false)}>
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin', { state: { section: 'alertas' } }); }}
+                    >
+                        <i className="fas fa-bell nav-icon" />
+                        Gestión de Alertas
+                    </div>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/auditoria'); }}
+                    >
+                        <i className="fas fa-history nav-icon" />
+                        Registro de Auditoría
+                    </div>
+
+                    <div
+                        className="nav-item active"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/perfil'); }}
+                    >
                         <i className="fas fa-id-card nav-icon" />
                         Mi Perfil
                     </div>

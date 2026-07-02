@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const { pool } = require('../config/database');
+const { logAuditoria } = require('./auditoriaController');
 
 const getUsuarios = async (req, res) => {
     try {
@@ -26,6 +27,8 @@ const createUsuario = async (req, res) => {
             'INSERT INTO usuarios (id_rol, nombre, correo, contrasena, fecha_registro, verificado) VALUES ($1, $2, $3, $4, NOW(), 1)',
             [id_rol, nombre, correo, hashedPassword]
         );
+        // Auditoría
+        if (req.user?.id) await logAuditoria(req.user.id, 'CREAR', 'USUARIO', String(result[0].insertId || correo), { correo, rol });
         
         res.status(201).json({ message: 'Usuario creado exitosamente' });
     } catch (error) {
@@ -52,6 +55,8 @@ const updateUsuario = async (req, res) => {
                 [id_rol, nombre, correo, id]
             );
         }
+        // Auditoría
+        if (req.user?.id) await logAuditoria(req.user.id, 'ACTUALIZAR', 'USUARIO', id, { nombre, correo, rol });
         
         res.json({ message: 'Usuario actualizado exitosamente' });
     } catch (error) {
@@ -64,6 +69,10 @@ const deleteUsuario = async (req, res) => {
     const { id } = req.params;
     try {
         await pool.query('DELETE FROM usuarios WHERE id_usuario = $1', [id]);
+        
+        // Auditoría
+        if (req.user?.id) await logAuditoria(req.user.id, 'ELIMINAR', 'USUARIO', id, {});
+        
         res.json({ message: 'Usuario eliminado exitosamente' });
     } catch (error) {
         console.error('Error al eliminar usuario:', error);

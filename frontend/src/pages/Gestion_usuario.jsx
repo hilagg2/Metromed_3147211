@@ -50,6 +50,16 @@ const Gestion_usuario = () => {
     };
 
     const handleSave = async () => {
+        // Validaciones del frontend
+        if (!form.nombre.trim()) return alert('El nombre es obligatorio.');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.correo)) return alert('Correo electrónico inválido.');
+        if (!editUser && (!form.password || form.password.length < 6)) {
+            return alert('La contraseña debe tener al menos 6 caracteres.');
+        }
+        if (editUser && form.password && form.password.length < 6) {
+            return alert('La nueva contraseña debe tener al menos 6 caracteres.');
+        }
+
         setSaving(true);
         try {
             const url = editUser
@@ -106,15 +116,43 @@ const Gestion_usuario = () => {
 
                 <nav className="sidebar-nav">
                     <div className="nav-section-label">Principal</div>
-                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin'); }}>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin'); }}
+                    >
                         <i className="fas fa-home nav-icon" />
                         Inicio
                     </div>
-                    <div className="nav-item active" onClick={() => setSidebarOpen(false)}>
+
+                    <div
+                        className="nav-item active"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/usuarios'); }}
+                    >
                         <i className="fas fa-users nav-icon" />
                         Gestión de Usuarios
                     </div>
-                    <div className="nav-item" onClick={() => { setSidebarOpen(false); navigate('/admin/perfil'); }}>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/Dashboard_admin', { state: { section: 'alertas' } }); }}
+                    >
+                        <i className="fas fa-bell nav-icon" />
+                        Gestión de Alertas
+                    </div>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/auditoria'); }}
+                    >
+                        <i className="fas fa-history nav-icon" />
+                        Registro de Auditoría
+                    </div>
+
+                    <div
+                        className="nav-item"
+                        onClick={() => { setSidebarOpen(false); navigate('/admin/perfil'); }}
+                    >
                         <i className="fas fa-id-card nav-icon" />
                         Mi Perfil
                     </div>
@@ -217,11 +255,11 @@ const Gestion_usuario = () => {
                                                 </span>
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.5rem' }}>
-                                                <button onClick={() => openEdit(u)} title="Editar" style={{ background: 'rgba(0,200,255,0.15)', border: 'none', color: '#00c8ff', borderRadius: '6px', padding: '0.4rem 0.7rem', cursor: 'pointer' }}>
-                                                    <i className="fas fa-edit" />
+                                                <button onClick={() => openEdit(u)} title="Editar" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(0,200,255,0.15)', border: '1px solid rgba(0,200,255,0.4)', color: '#00c8ff', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 600 }}>
+                                                    <i className="fas fa-edit" /> Editar
                                                 </button>
-                                                <button onClick={() => handleDelete(u.id)} title="Eliminar" style={{ background: 'rgba(231,76,60,0.15)', border: 'none', color: '#e74c3c', borderRadius: '6px', padding: '0.4rem 0.7rem', cursor: 'pointer' }}>
-                                                    <i className="fas fa-trash" />
+                                                <button onClick={() => handleDelete(u.id)} title="Eliminar" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(231,76,60,0.15)', border: '1px solid rgba(231,76,60,0.4)', color: '#e74c3c', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 600 }}>
+                                                    <i className="fas fa-trash" /> Eliminar
                                                 </button>
                                             </td>
                                         </tr>
@@ -239,13 +277,13 @@ const Gestion_usuario = () => {
             {/* ── Modal ───────────────────────────────────────── */}
             {showModal && (
                 <div style={{
-                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
                 }}>
                     <div style={{
-                        background: 'var(--surface)', borderRadius: '12px',
-                        padding: '2rem', width: '100%', maxWidth: '420px',
-                        boxShadow: '0 20px 60px rgba(0,0,0,0.5)', border: '1px solid var(--border)'
+                        background: '#0a0f12', borderRadius: '12px',
+                        padding: '2rem', width: '100%', maxWidth: '450px',
+                        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.9)', border: '1px solid rgba(0,255,136,0.3)'
                     }}>
                         <h3 style={{ marginBottom: '1.5rem', color: 'var(--text-light)', fontWeight: 700 }}>
                             {editUser ? 'Editar Usuario' : 'Nuevo Usuario'}

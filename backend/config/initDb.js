@@ -123,6 +123,11 @@ const initDatabase = async () => {
                 canales_enviados  VARCHAR(50) NOT NULL DEFAULT 'panel'
             )
         `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_ng_fecha_generacion
+            ON notificaciones_globales (fecha_generacion DESC)
+        `);
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS historial_alertas_usuario (

@@ -54,4 +54,22 @@ const requireRole = (rolRequerido) => {
     };
 };
 
-module.exports = { verifyToken, requireRole };
+/**
+ * Middleware de autorización exclusivo para Administradores.
+ * Debe usarse DESPUÉS de verifyToken.
+ * id_rol === 1 → Administrador (RN-46.1)
+ *
+ * @example
+ *   router.get('/admin/history', verifyToken, requireAdmin, getHistorialGlobal);
+ */
+const requireAdmin = (req, res, next) => {
+    if (!req.user || Number(req.user.rol) !== 1) {
+        return res.status(403).json({
+            success: false,
+            message: 'Acceso restringido a Administradores.'
+        });
+    }
+    next();
+};
+
+module.exports = { verifyToken, requireRole, requireAdmin };

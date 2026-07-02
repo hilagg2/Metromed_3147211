@@ -50,6 +50,7 @@ const juegoRoutes = require('./routes/juegoRoutes');
 const apoyoRoutes = require('./routes/apoyoRoutes');
 const congestionRoutes = require('./routes/congestionRoutes');
 const alertsRoutes = require('./routes/alertasRoutes');
+const auditoriaRoutes = require('./routes/auditoriaRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
@@ -57,6 +58,7 @@ app.use('/api/juegos', juegoRoutes);
 app.use('/api/apoyo', apoyoRoutes);
 app.use('/api/congestion', congestionRoutes);
 app.use('/api/alerts', alertsRoutes);
+app.use('/api/auditoria', auditoriaRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -133,6 +135,26 @@ const startServer = async () => {
                 console.log('✅ Tablas de apoyo psicológico verificadas/creadas correctamente');
             } catch (apoyoError) {
                 console.warn('⚠️ Advertencia en migración de apoyo:', apoyoError.message);
+            }
+
+            // ── Migración automática: tablas de alertas (RF-41 a RF-46) ──
+            try {
+                const alertasMigrationPath = path.join(__dirname, 'database', 'alertas_migration.sql');
+                const alertasSQL = fs.readFileSync(alertasMigrationPath, 'utf8');
+                await pool.query(alertasSQL);
+                console.log('✅ Tablas de alertas y notificaciones verificadas/creadas correctamente');
+            } catch (alertasError) {
+                console.warn('⚠️ Advertencia en migración de alertas:', alertasError.message);
+            }
+
+            // ── Migración automática: tabla de auditoría de administrador ──
+            try {
+                const auditoriaMigrationPath = path.join(__dirname, 'database', 'auditoria_migration.sql');
+                const auditoriaSQL = fs.readFileSync(auditoriaMigrationPath, 'utf8');
+                await pool.query(auditoriaSQL);
+                console.log('✅ Tabla de auditoría admin verificada/creada correctamente');
+            } catch (auditoriaError) {
+                console.warn('⚠️ Advertencia en migración de auditoría:', auditoriaError.message);
             }
         } catch (dbError) {
             console.warn('⚠️ No se pudo conectar a la base de datos. El servidor iniciará de todos modos.');

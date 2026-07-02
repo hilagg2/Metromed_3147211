@@ -59,6 +59,42 @@ const AdminAlertas = () => {
     };
     const labelStyle = { display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#00b8ff', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.35rem' };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm('¿Estás seguro de eliminar esta alerta? Desaparecerá también para los usuarios.')) return;
+        try {
+            const res = await fetch(`http://localhost:3000/api/alerts/admin/history/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (res.ok) fetchHistorial();
+            else alert('Error al eliminar la alerta');
+        } catch (error) {
+            console.error(error);
+            alert('Error de red al eliminar');
+        }
+    };
+
+    const handleResend = async (id) => {
+        if (!window.confirm('¿Quieres reenviar esta alerta a todos los usuarios correspondientes?')) return;
+        setEnviando(true);
+        try {
+            const res = await fetch(`http://localhost:3000/api/alerts/admin/history/${id}/resend`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (res.ok) {
+                alert('Alerta reenviada con éxito');
+                fetchHistorial();
+            } else {
+                alert('Error al reenviar la alerta');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error de red al reenviar');
+        }
+        setEnviando(false);
+    };
+
     return (
         <div style={{ fontFamily: 'Inter, Segoe UI, sans-serif', color: '#fff' }}>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#00ff88', textShadow: '0 0 10px rgba(0,255,136,0.3)' }}>
@@ -123,7 +159,7 @@ const AdminAlertas = () => {
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid rgba(0,255,136,0.2)', color: '#00b8ff' }}>
-                                        {['#', 'Tipo', 'Título', 'Afectado', 'Canales', 'Fecha'].map(h => (
+                                        {['#', 'Tipo', 'Título', 'Afectado', 'Canales', 'Fecha', 'Acciones'].map(h => (
                                             <th key={h} style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                                         ))}
                                     </tr>
@@ -140,6 +176,14 @@ const AdminAlertas = () => {
                                             <td style={{ padding: '0.75rem', color: 'rgba(255,255,255,0.7)' }}>{a.canales_enviados}</td>
                                             <td style={{ padding: '0.75rem', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
                                                 {new Date(a.fecha_generacion).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </td>
+                                            <td style={{ padding: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+                                                <button onClick={() => handleResend(a.id_notificacion)} disabled={enviando} title="Reenviar" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(0,200,255,0.15)', border: '1px solid rgba(0,200,255,0.4)', color: '#00c8ff', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: enviando ? 'wait' : 'pointer', fontWeight: 600 }}>
+                                                    <i className="fas fa-paper-plane" /> Reenviar
+                                                </button>
+                                                <button onClick={() => handleDelete(a.id_notificacion)} title="Eliminar" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(231,76,60,0.15)', border: '1px solid rgba(231,76,60,0.4)', color: '#e74c3c', borderRadius: '6px', padding: '0.4rem 0.8rem', cursor: 'pointer', fontWeight: 600 }}>
+                                                    <i className="fas fa-trash" /> Eliminar
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
